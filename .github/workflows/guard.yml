@@ -1,4 +1,4 @@
-name: 仓库守卫
+name: 仓库守卫与测试
 
 on:
   push:
@@ -19,14 +19,23 @@ jobs:
             exit 1
           fi
           echo "OK：仓库中没有数据文件"
+      - name: 检查有没有泄漏密钥
+        run: |
+          if git grep -nE 'sk-[A-Za-z0-9]{20,}' -- . ':!*.md' ; then
+            echo "::error::疑似把 API Key 提交进仓库了"
+            exit 1
+          fi
+          echo "OK：没有明文密钥"
 
-  syntax:
-    name: 语法检查
+  tests:
+    name: 单元测试
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-      - name: 编译全部源码
-        run: python -m compileall -q src
+      - name: 安装测试所需依赖
+        run: python -m pip install -q numpy Pillow openai
+      - name: 跑测试
+        run: python -m unittest discover -s tests -v

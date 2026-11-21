@@ -48,6 +48,8 @@ class PageResult:
     llm_total: int | None = None
     agree: bool | None = None
     adopted: list[str] = field(default_factory=list)
+    grid_h: list[int] = field(default_factory=list)
+    grid_v: list[int] = field(default_factory=list)
 
     @property
     def scores(self) -> list[int | None]:
@@ -105,14 +107,14 @@ def _apply_llm(r: PageResult, scores: list[int | None], marks: list[int]) -> Non
     if r.adopted:
         r.flags.append("已按『多个标记取√、×作废』规则采用 LLM 判断：" + "；".join(r.adopted))
     if diffs:
-        r.agree = False
         r.flags.append("双通道不一致 —— " + "；".join(diffs))
-    else:
-        r.agree = True
+    # 采用过 LLM 判断的页，本质仍是"两通道不一致"，只是已经按规则裁决过了
+    r.agree = not (diffs or r.adopted)
 
 
 def process_pdf(pdf_path: str, dpi: int = 300, progress: Progress | None = None,
-                llm_client=None, workers: int = 6) -> list[PageResult]:
+                llm_client=None, workers: int = 6,
+                llm_progress: Callable[[int, int], None] | None = None) -> list[PageResult]:
     """处理整个 PDF。llm_client 不为 None 时，额外跑一遍 LLM 通道做交叉校验。"""
     results: list[PageResult] = []
     jobs: list[tuple[int, int, np.ndarray]] = []
@@ -125,7 +127,8 @@ def process_pdf(pdf_path: str, dpi: int = 300, progress: Progress | None = None,
         if not grid.ok:
             results.append(
                 PageResult(page=page_no, header=Header("", "", ""), readings=[],
-                           total=None, grid_ok=False, flags=[grid.note])
+                           total=None, grid_ok=False, flags=[grid.note],
+                           grid_h=list(grid.h), grid_v=list(grid.v))
             )
             if progress:
                 progress(page_no, page_no)
@@ -147,7 +150,8 @@ def process_pdf(pdf_path: str, dpi: int = 300, progress: Progress | None = None,
 
         results.append(
             PageResult(page=page_no, header=header, readings=readings,
-                       total=sum_scores(readings), grid_ok=True, flags=flags)
+                       total=sum_scores(readings), grid_ok=True, flags=flags,
+                       grid_h=list(grid.h), grid_v=list(grid.v))
         )
         if llm_client is not None:
             for row_idx, rgb in enumerate(crop_rows_for_llm(gray, grid)):
@@ -160,12 +164,16 @@ def process_pdf(pdf_path: str, dpi: int = 300, progress: Progress | None = None,
         with ThreadPoolExecutor(max_workers=max(1, workers)) as pool:
             futures = {pool.submit(llm_client.read_row, rgb): (pi, ri)
                        for pi, ri, rgb in jobs}
+            done = 0
             for fut in as_completed(futures):
                 key = futures[fut]
                 try:
                     collected[key] = fut.result()
                 except Exception:  # noqa: BLE001
                     collected[key] = None
+                done += 1
+                if llm_progress is not None and (done % 10 == 0 or done == len(futures)):
+                    llm_progress(done, len(futures))
         by_page: dict[int, dict] = {}
         for (pi, ri), verdict in collected.items():
             slot = by_page.setdefault(pi, {"scores": [None] * len(INDICATOR_ROWS),

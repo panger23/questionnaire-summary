@@ -1,0 +1,376 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>审计问卷汇总</title>
+<style>
+  :root{
+    --bg:#f5f6f8; --card:#fff; --line:#e2e5ea; --text:#1f2328; --muted:#6b7280;
+    --primary:#2563eb; --primary-dark:#1d4ed8; --warn:#fff8dc; --warn-line:#e8c96a;
+    --ok:#15803d; --bad:#b91c1c;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);
+       font:14px/1.6 -apple-system,"PingFang SC","Microsoft YaHei",sans-serif}
+  header{display:flex;align-items:center;gap:12px;padding:14px 22px;background:#fff;
+         border-bottom:1px solid var(--line);position:sticky;top:0;z-index:10}
+  header h1{font-size:16px;margin:0;font-weight:600}
+  .badge{font-size:12px;padding:3px 10px;border-radius:999px;background:#eef2ff;color:#3730a3}
+  .badge.llm{background:#e0f2fe;color:#075985}
+  .spacer{flex:1}
+  button{font:inherit;cursor:pointer;border:1px solid var(--line);background:#fff;
+         border-radius:8px;padding:7px 14px;transition:.15s}
+  button:hover{background:#f3f4f6}
+  button.primary{background:var(--primary);border-color:var(--primary);color:#fff}
+  button.primary:hover{background:var(--primary-dark)}
+  button:disabled{opacity:.45;cursor:not-allowed}
+  main{max-width:1240px;margin:22px auto 60px;padding:0 20px;display:flex;flex-direction:column;gap:16px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:20px}
+  #dropzone{border:2px dashed #c7ccd4;border-radius:12px;padding:44px 20px;text-align:center;
+            color:var(--muted);cursor:pointer;transition:.15s}
+  #dropzone:hover,#dropzone.over{border-color:var(--primary);background:#f8faff;color:var(--primary)}
+  #dropzone b{color:var(--text);font-size:15px}
+  .row{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  .bar{height:8px;background:#eef0f3;border-radius:999px;overflow:hidden;margin-top:12px}
+  .bar>div{height:100%;width:0;background:var(--primary);transition:width .3s}
+  .stat{display:flex;gap:22px;flex-wrap:wrap;font-size:13px;color:var(--muted);margin-bottom:14px}
+  .stat b{color:var(--text);font-size:15px}
+  .tabs{display:flex;gap:6px;margin-bottom:14px}
+  .tabs button.active{background:var(--primary);border-color:var(--primary);color:#fff}
+  .scroll{overflow:auto;border:1px solid var(--line);border-radius:10px;max-height:62vh}
+  table{border-collapse:collapse;width:100%;font-size:13px;background:#fff}
+  th,td{border-bottom:1px solid var(--line);padding:7px 10px;text-align:center;white-space:nowrap}
+  thead th{background:#f8fafc;position:sticky;top:0;z-index:2;font-weight:600}
+  tbody tr.flag{background:var(--warn)}
+  tbody tr:hover{background:#f5f8ff}
+  tbody tr.flag:hover{background:#fdf3cf}
+  td.note{text-align:left;white-space:normal;min-width:260px;max-width:420px;color:#7a5b00;font-size:12px}
+  td input{width:52px;text-align:center;font:inherit;border:1px solid #d7dbe2;border-radius:6px;padding:3px 4px}
+  td input.diff{border-color:#f0a33c;background:#fff7ec}
+  .muted{color:var(--muted);font-size:12px}
+  .pill{display:inline-block;padding:1px 8px;border-radius:999px;font-size:12px}
+  .pill.ok{background:#e7f6ec;color:var(--ok)}
+  .pill.bad{background:#fdeaea;color:var(--bad)}
+  .pill.none{background:#f1f2f4;color:var(--muted)}
+  .linkbtn{background:none;border:none;color:var(--primary);padding:2px 4px;font-size:12px}
+  .linkbtn:hover{text-decoration:underline;background:none}
+  #modal{position:fixed;inset:0;background:rgba(15,23,42,.55);display:flex;align-items:center;
+         justify-content:center;z-index:50;padding:24px}
+  #modal .box{background:#fff;border-radius:14px;max-width:1100px;width:100%;max-height:90vh;
+              overflow:auto;padding:16px}
+  #modal img{width:100%;display:block;border-radius:8px;border:1px solid var(--line)}
+  .modal-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+  label.field{display:block;margin:12px 0 4px;font-size:13px;color:var(--muted)}
+  input.text{width:100%;font:inherit;padding:8px 10px;border:1px solid #d7dbe2;border-radius:8px}
+  .hint{font-size:12px;color:var(--muted);margin-top:6px}
+  .msg{margin-top:10px;font-size:13px}
+  .msg.ok{color:var(--ok)} .msg.bad{color:var(--bad)}
+  .hidden{display:none !important}
+</style>
+</head>
+<body>
+<header>
+  <h1>审计问卷汇总</h1>
+  <span id="mode-badge" class="badge">未配置</span>
+  <span class="spacer"></span>
+  <button id="btn-settings">设置</button>
+</header>
+
+<main>
+  <section class="card" id="upload-card">
+    <div id="dropzone">
+      <b>把扫描好的 PDF 拖进来</b><br>
+      或者点击这里选择文件
+    </div>
+    <input type="file" id="file" accept="application/pdf" hidden>
+    <div class="row" style="margin-top:16px">
+      <label><input type="checkbox" id="use-llm"> 启用 LLM 复核（更准，约 2 分钟、约 ¥0.2）</label>
+      <span class="spacer"></span>
+      <span class="muted" id="upload-hint"></span>
+    </div>
+  </section>
+
+  <section class="card hidden" id="progress-card">
+    <div class="row"><b id="progress-text">准备中…</b><span class="spacer"></span>
+      <span class="muted" id="progress-sub"></span></div>
+    <div class="bar"><div id="bar-fill"></div></div>
+  </section>
+
+  <section class="card hidden" id="result-card">
+    <div class="stat" id="stat-line"></div>
+    <div class="tabs">
+      <button data-tab="summary" class="active">汇总</button>
+      <button data-tab="detail">明细（可改分）</button>
+      <span class="spacer"></span>
+      <button class="primary" id="btn-download">下载 Excel</button>
+    </div>
+    <div id="tab-summary" class="scroll"></div>
+    <div id="tab-detail" class="scroll hidden"></div>
+  </section>
+</main>
+
+<div id="modal" class="hidden"><div class="box"><div class="modal-head">
+  <b id="modal-title">设置</b>
+  <button id="modal-close">关闭</button>
+</div><div id="modal-body"></div></div></div>
+
+<script>
+const $ = (s, r = document) => r.querySelector(s);
+let JOB = null, DATA = null, CONFIG = null, polling = null;
+
+/* ---------------- 设置 ---------------- */
+async function loadConfig() {
+  CONFIG = await (await fetch('/api/config')).json();
+  const badge = $('#mode-badge');
+  if (CONFIG.has_key) {
+    badge.textContent = 'LLM 可用 · ' + CONFIG.key_masked;
+    badge.className = 'badge llm';
+  } else {
+    badge.textContent = '纯代码模式（未配置 Key）';
+    badge.className = 'badge';
+  }
+  $('#use-llm').checked = !!CONFIG.has_key;
+  $('#use-llm').disabled = !CONFIG.has_key;
+}
+
+function openSettings() {
+  $('#modal-title').textContent = '设置';
+  $('#modal-body').innerHTML = `
+    <label class="field">API 地址（兼容 OpenAI 协议，可改）</label>
+    <input class="text" id="cfg-base" value="${CONFIG.api_base}">
+    <label class="field">模型名</label>
+    <input class="text" id="cfg-model" value="${CONFIG.model}">
+    <label class="field">API Key ${CONFIG.has_key ? '（已保存：' + CONFIG.key_masked + '，留空表示不修改）' : ''}</label>
+    <input class="text" id="cfg-key" type="password" placeholder="sk-...">
+    <div class="hint">Key 只保存在本机配置文件里，不会上传到任何地方，也不会进版本库。</div>
+    <div class="row" style="margin-top:16px">
+      <button class="primary" id="cfg-save">保存</button>
+      <button id="cfg-test">测试连接</button>
+      <button id="cfg-clear">清除 Key</button>
+    </div>
+    <div class="msg" id="cfg-msg"></div>`;
+  $('#modal').classList.remove('hidden');
+  $('#cfg-save').onclick = async () => {
+    const r = await fetch('/api/config', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        api_base: $('#cfg-base').value, model: $('#cfg-model').value, api_key: $('#cfg-key').value
+      })
+    });
+    CONFIG = await r.json();
+    $('#cfg-msg').className = 'msg ok';
+    $('#cfg-msg').textContent = '已保存。';
+    await loadConfig();
+  };
+  $('#cfg-test').onclick = async () => {
+    $('#cfg-msg').className = 'msg';
+    $('#cfg-msg').textContent = '测试中…';
+    const r = await (await fetch('/api/config/test', {method: 'POST'})).json();
+    $('#cfg-msg').className = 'msg ' + (r.ok ? 'ok' : 'bad');
+    $('#cfg-msg').textContent = r.message;
+  };
+  $('#cfg-clear').onclick = async () => {
+    CONFIG = await (await fetch('/api/config/clear', {method: 'POST'})).json();
+    $('#cfg-msg').className = 'msg ok';
+    $('#cfg-msg').textContent = 'Key 已清除，将使用纯代码模式。';
+    await loadConfig();
+  };
+}
+
+/* ---------------- 上传与进度 ---------------- */
+async function upload(file) {
+  if (!file) return;
+  if (!file.name.toLowerCase().endsWith('.pdf')) { alert('请选择 PDF 文件'); return; }
+  $('#result-card').classList.add('hidden');
+  $('#progress-card').classList.remove('hidden');
+  $('#progress-text').textContent = '上传中…';
+  $('#bar-fill').style.width = '0%';
+
+  const fd = new FormData();
+  fd.append('file', file);
+  fd.append('use_llm', $('#use-llm').checked ? 'true' : 'false');
+  const resp = await fetch('/api/upload', {method: 'POST', body: fd});
+  if (!resp.ok) {
+    const err = await resp.json().catch(() => ({detail: '上传失败'}));
+    $('#progress-text').textContent = '失败：' + (err.detail || resp.status);
+    return;
+  }
+  JOB = (await resp.json()).job_id;
+  poll();
+}
+
+function poll() {
+  clearInterval(polling);
+  polling = setInterval(async () => {
+    const s = await (await fetch('/api/jobs/' + JOB)).json();
+    if (s.status === 'error') {
+      clearInterval(polling);
+      $('#progress-text').textContent = '识别失败：' + s.error;
+      return;
+    }
+    if (s.status === 'done') {
+      clearInterval(polling);
+      $('#progress-card').classList.add('hidden');
+      await showResult();
+      return;
+    }
+    if (s.stage === 'LLM 复核中') {
+      const pct = s.llm_total ? Math.round(s.llm_done / s.llm_total * 100) : 0;
+      $('#progress-text').textContent = `LLM 复核中… ${s.llm_done}/${s.llm_total} 行`;
+      $('#bar-fill').style.width = pct + '%';
+      $('#progress-sub').textContent = '约需 2 分钟';
+    } else {
+      const pct = s.total_pages ? Math.round(s.pages_done / s.total_pages * 100) : 0;
+      $('#progress-text').textContent = `正在识别… ${s.pages_done}/${s.total_pages} 页`;
+      $('#bar-fill').style.width = pct + '%';
+      $('#progress-sub').textContent = '';
+    }
+  }, 900);
+}
+
+/* ---------------- 结果渲染 ---------------- */
+async function showResult() {
+  DATA = await (await fetch(`/api/jobs/${JOB}/result`)).json();
+  $('#result-card').classList.remove('hidden');
+  renderStats();
+  renderSummary();
+  renderDetail();
+}
+
+function renderStats() {
+  const s = DATA.stats;
+  const parts = [
+    `<span>份数 <b>${s.pages}</b></span>`,
+    `<span>待确认 <b style="color:${s.flagged ? '#b45309' : '#15803d'}">${s.flagged}</b></span>`,
+  ];
+  if (s.agree + s.disagree > 0) {
+    parts.push(`<span>双通道一致 <b>${s.agree}</b> / 不一致 <b>${s.disagree}</b></span>`);
+  }
+  if (s.cost != null) parts.push(`<span>花费 <b>¥${s.cost.toFixed(2)}</b></span>`);
+  parts.push(`<span>模式 <b>${s.mode}</b></span>`);
+  $('#stat-line').innerHTML = parts.join('');
+}
+
+function renderSummary() {
+  const branches = DATA.summary;
+  const maxN = Math.max(...branches.map(b => b.scores.length));
+  let html = '<table><thead><tr><th>序号</th>';
+  branches.forEach(b => html += `<th>${b.branch}</th>`);
+  html += '</tr></thead><tbody>';
+  html += '<tr><td><b>组员数量</b></td>' + branches.map(b => `<td><b>${b.count}</b></td>`).join('') + '</tr>';
+  html += '<tr><td><b>代职人</b></td>' + branches.map(b => `<td>${b.assistant || '-'}</td>`).join('') + '</tr>';
+  for (let i = 0; i < maxN; i++) {
+    html += `<tr><td>${i + 1}</td>`;
+    branches.forEach(b => html += `<td>${b.scores[i] ?? ''}</td>`);
+    html += '</tr>';
+  }
+  html += '<tr><td><b>平均分</b></td>' +
+    branches.map(b => `<td><b>${b.avg == null ? '-' : b.avg.toFixed(2)}</b></td>`).join('') + '</tr>';
+  html += '</tbody></table>';
+  $('#tab-summary').innerHTML = html;
+}
+
+function renderDetail() {
+  let html = `<table><thead><tr>
+    <th>页码</th><th>分行</th><th>组长助手</th><th>审计组长</th>
+    <th>任务分工</th><th>沟通协调</th><th>团结协作</th><th>专业技术</th><th>关爱扶持</th>
+    <th>合计</th><th>LLM</th><th>标记数</th><th>一致</th><th>操作</th><th>标记说明</th>
+  </tr></thead><tbody>`;
+  DATA.rows.forEach(r => {
+    const flag = (r.flags && r.flags.length) || r.total == null;
+    html += `<tr class="${flag ? 'flag' : ''}" data-page="${r.page}">`;
+    html += `<td>${r.page}</td><td style="text-align:left">${r.branch || '-'}</td>
+             <td>${r.assistant || '-'}</td><td>${r.lead || '-'}</td>`;
+    r.scores.forEach((v, i) => {
+      const diff = r.llm_scores && r.llm_scores[i] != null && r.llm_scores[i] !== v;
+      const title = diff ? ` title="LLM 判为 ${r.llm_scores[i]}"` : '';
+      html += `<td><input type="number" min="1" max="10" value="${v ?? ''}" ${v == null ? 'class="diff"' : (diff ? 'class="diff"' : '')}
+               data-page="${r.page}" data-row="${i}"${title}></td>`;
+    });
+    const pill = r.agree == null ? '<span class="pill none">—</span>'
+      : (r.agree ? '<span class="pill ok">一致</span>' : '<span class="pill bad">不一致</span>');
+    html += `<td><b>${r.total ?? '-'}</b></td>
+             <td>${r.llm_total ?? '-'}</td>
+             <td class="muted">${r.llm_marks ? r.llm_marks.join('/') : '-'}</td>
+             <td>${pill}</td>
+             <td><button class="linkbtn" data-img="${r.page}">看原图</button>${
+               r.agree === false && r.llm_scores ? `<button class="linkbtn" data-adopt="${r.page}">采用LLM</button>` : ''}</td>
+             <td class="note">${(r.flags || []).join('；')}</td>`;
+    html += '</tr>';
+  });
+  html += '</tbody></table>';
+  const box = $('#tab-detail');
+  box.innerHTML = html;
+
+  box.querySelectorAll('input[type=number]').forEach(inp => {
+    inp.onchange = async () => {
+      const page = +inp.dataset.page, row = +inp.dataset.row;
+      const value = inp.value === '' ? null : Math.max(1, Math.min(10, +inp.value));
+      const resp = await fetch(`/api/jobs/${JOB}/edit`, {
+        method: 'POST', headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({page, row, score: value})
+      });
+      if (!resp.ok) { alert('修改失败'); return; }
+      await refreshAfterEdit(await resp.json());
+    };
+  });
+  box.querySelectorAll('[data-img]').forEach(btn => {
+    btn.onclick = () => showImage(+btn.dataset.img);
+  });
+  box.querySelectorAll('[data-adopt]').forEach(btn => {
+    btn.onclick = async () => {
+      const resp = await fetch(`/api/jobs/${JOB}/adopt`, {
+        method: 'POST', headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({page: +btn.dataset.adopt})
+      });
+      if (!resp.ok) { alert('操作失败'); return; }
+      await refreshAfterEdit(await resp.json());
+    };
+  });
+}
+
+async function refreshAfterEdit(resp) {
+  DATA.summary = resp.summary;
+  DATA.stats = resp.stats;
+  renderStats();
+  renderSummary();
+  renderDetail();
+}
+
+function showImage(page) {
+  $('#modal-title').textContent = `第 ${page} 页原图（可对照改分）`;
+  $('#modal-body').innerHTML = `<img src="/api/jobs/${JOB}/page/${page}" alt="第${page}页">`;
+  $('#modal').classList.remove('hidden');
+}
+
+/* ---------------- 事件绑定 ---------------- */
+const dz = $('#dropzone');
+dz.onclick = () => $('#file').click();
+$('#file').onchange = e => upload(e.target.files[0]);
+['dragenter', 'dragover'].forEach(ev => dz.addEventListener(ev, e => {
+  e.preventDefault(); dz.classList.add('over');
+}));
+['dragleave', 'drop'].forEach(ev => dz.addEventListener(ev, e => {
+  e.preventDefault(); dz.classList.remove('over');
+}));
+dz.addEventListener('drop', e => upload(e.dataTransfer.files[0]));
+
+$('#btn-settings').onclick = openSettings;
+$('#modal-close').onclick = () => $('#modal').classList.add('hidden');
+$('#modal').onclick = e => { if (e.target.id === 'modal') $('#modal').classList.add('hidden'); };
+$('#btn-download').onclick = () => { if (JOB) window.location = `/api/jobs/${JOB}/download`; };
+document.querySelectorAll('.tabs [data-tab]').forEach(btn => {
+  btn.onclick = () => {
+    document.querySelectorAll('.tabs [data-tab]').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    const tab = btn.dataset.tab;
+    $('#tab-summary').classList.toggle('hidden', tab !== 'summary');
+    $('#tab-detail').classList.toggle('hidden', tab !== 'detail');
+  };
+});
+
+loadConfig();
+</script>
+</body>
+</html>
