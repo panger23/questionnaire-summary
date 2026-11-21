@@ -50,8 +50,8 @@ def _summary(results) -> list[dict]:
     return out
 
 
-def _rows(results) -> list[dict]:
-    return [{
+def _row(r) -> dict:
+    return {
         "page": r.page,
         "branch": r.header.project,
         "assistant": r.header.assistant,
@@ -65,7 +65,11 @@ def _rows(results) -> list[dict]:
         "flags": r.flags,
         "adopted": r.adopted,
         "grid_ok": r.grid_ok,
-    } for r in results]
+    }
+
+
+def _rows(results) -> list[dict]:
+    return [_row(r) for r in results]
 
 
 def _find(job, page: int):
@@ -172,7 +176,7 @@ def edit_score(job_id: str, body: EditIn):
     r.total = sum_scores(r.readings)
     if "人工修改" not in " ".join(r.flags):
         r.flags.append("已人工修改分数")
-    return {"page": r.page, "scores": r.scores, "total": r.total, **_snapshot(job)}
+    return {"row": _row(r), **_snapshot(job)}
 
 
 @app.post("/api/jobs/{job_id}/adopt")
@@ -189,7 +193,7 @@ def adopt_llm(job_id: str, body: PageIn):
             r.readings[i].score = value
     r.total = sum_scores(r.readings)
     r.flags.append("已人工采用 LLM 通道的分数")
-    return {"page": r.page, "scores": r.scores, "total": r.total, **_snapshot(job)}
+    return {"row": _row(r), **_snapshot(job)}
 
 
 # ---------------------------------------------------------------- 原图与下载

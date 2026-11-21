@@ -118,6 +118,8 @@
 <script>
 const $ = (s, r = document) => r.querySelector(s);
 let JOB = null, DATA = null, CONFIG = null, polling = null;
+const PENDING = new Set();
+async function flushEdits() { while (PENDING.size) { await Promise.all([...PENDING]); } }
 
 /* ---------------- 设置 ---------------- */
 async function loadConfig() {
@@ -302,18 +304,26 @@ function renderDetail() {
   });
   html += '</tbody></table>';
   const box = $('#tab-detail');
+  const keepScroll = box.scrollTop;
   box.innerHTML = html;
+  box.scrollTop = keepScroll;
 
   box.querySelectorAll('input[type=number]').forEach(inp => {
+    inp.addEventListener('keydown', e => { if (e.key === 'Enter') inp.blur(); });
     inp.onchange = async () => {
       const page = +inp.dataset.page, row = +inp.dataset.row;
       const value = inp.value === '' ? null : Math.max(1, Math.min(10, +inp.value));
-      const resp = await fetch(`/api/jobs/${JOB}/edit`, {
-        method: 'POST', headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({page, row, score: value})
-      });
-      if (!resp.ok) { alert('修改失败'); return; }
-      await refreshAfterEdit(await resp.json());
+      const task = (async () => {
+        const resp = await fetch(`/api/jobs/${JOB}/edit`, {
+          method: 'POST', headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({page, row, score: value})
+        });
+        if (!resp.ok) { alert('修改失败'); return; }
+        await refreshAfterEdit(await resp.json());
+      })();
+      PENDING.add(task);
+      task.finally(() => PENDING.delete(task));
+      await task;
     };
   });
   box.querySelectorAll('[data-img]').forEach(btn => {
@@ -332,6 +342,10 @@ function renderDetail() {
 }
 
 async function refreshAfterEdit(resp) {
+  if (resp.row) {
+    const i = DATA.rows.findIndex(x => x.page === resp.row.page);
+    if (i >= 0) DATA.rows[i] = resp.row;
+  }
   DATA.summary = resp.summary;
   DATA.stats = resp.stats;
   renderStats();
@@ -360,7 +374,10 @@ dz.addEventListener('drop', e => upload(e.dataTransfer.files[0]));
 $('#btn-settings').onclick = openSettings;
 $('#modal-close').onclick = () => $('#modal').classList.add('hidden');
 $('#modal').onclick = e => { if (e.target.id === 'modal') $('#modal').classList.add('hidden'); };
-$('#btn-download').onclick = () => { if (JOB) window.location = `/api/jobs/${JOB}/download`; };
+$('#btn-download').onclick = async () => {
+  await flushEdits();
+  if (JOB) window.location = `/api/jobs/${JOB}/download`;
+};
 document.querySelectorAll('.tabs [data-tab]').forEach(btn => {
   btn.onclick = () => {
     document.querySelectorAll('.tabs [data-tab]').forEach(b => b.classList.remove('active'));
