@@ -1,7 +1,7 @@
 """串起整条流水线：PDF → 每页的分数与表头字段（可选 LLM 交叉校验）。"""
 from __future__ import annotations
 
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from typing import Callable
 
@@ -9,7 +9,15 @@ import numpy as np
 
 from .grid import Grid, find_grid
 from .header import Header, header_crop, parse_header
-from .marks import INDICATOR_NAMES, RowReading, read_indicator_rows, sum_scores
+from .marks import (
+    INDICATOR_NAMES,
+    INDICATOR_ROWS,
+    SCORE_COL_END,
+    SCORE_COL_START,
+    RowReading,
+    read_indicator_rows,
+    sum_scores,
+)
 from .render import ink_mask, render_pages
 
 Progress = Callable[[int, int], None]
@@ -33,13 +41,18 @@ class PageResult:
         return [r.score for r in self.readings]
 
 
-def crop_for_llm(gray: np.ndarray, grid: Grid) -> np.ndarray:
-    """裁给模型看的区域：表头两行 + 5 个指标行，去掉备注列、小计列和手写总分行。"""
-    y0, y1 = grid.h[2], grid.h[9]
-    x0, x1 = grid.v[0], grid.v[12]
-    pad = 6
-    sub = gray[y0 + pad:y1 - pad, x0 + pad:x1 - pad]
-    return np.repeat(sub[:, :, None], 3, axis=2)
+def crop_rows_for_llm(gray: np.ndarray, grid: Grid) -> list[np.ndarray]:
+    """按行裁出给模型看的图：每行只含 10 个分值格，一行一张图。
+
+    实测整块发会翻车（模型在最左列会输出等差数列），一行一张图则全对。
+    """
+    rows: list[np.ndarray] = []
+    x0, x1 = grid.v[SCORE_COL_START] - 6, grid.v[SCORE_COL_END] + 6
+    for r in INDICATOR_ROWS:
+        y0, y1 = grid.h[r] - 4, grid.h[r + 1] + 4
+        sub = gray[y0:y1, x0:x1]
+        rows.append(np.repeat(sub[:, :, None], 3, axis=2))
+    return rows
 
 
 def _apply_llm(r: PageResult, scores: list[int | None] | None) -> None:
@@ -104,14 +117,28 @@ def process_pdf(pdf_path: str, dpi: int = 300, progress: Progress | None = None,
                        total=sum_scores(readings), grid_ok=True, flags=flags)
         )
         if llm_client is not None:
-            jobs.append((len(results) - 1, crop_for_llm(gray, grid)))
+            for row_idx, rgb in enumerate(crop_rows_for_llm(gray, grid)):
+                jobs.append((len(results) - 1, row_idx, rgb))
         if progress:
             progress(page_no, page_no)
 
     if llm_client is not None and jobs:
+        collected: dict[tuple[int, int], int | None] = {}
         with ThreadPoolExecutor(max_workers=max(1, workers)) as pool:
-            for idx, scores in pool.map(lambda job: (job[0], llm_client.read_scores(job[1])), jobs):
-                _apply_llm(results[idx], scores)
+            futures = {pool.submit(llm_client.read_row, rgb): (pi, ri)
+                       for pi, ri, rgb in jobs}
+            for fut in as_completed(futures):
+                key = futures[fut]
+                try:
+                    col = fut.result()
+                except Exception:  # noqa: BLE001
+                    col = None
+                collected[key] = col
+        by_page: dict[int, list[int | None]] = {}
+        for (pi, ri), score in collected.items():
+            by_page.setdefault(pi, [None] * len(INDICATOR_ROWS))[ri] = score
+        for pi, scores in by_page.items():
+            _apply_llm(results[pi], scores)
 
     return results
 
