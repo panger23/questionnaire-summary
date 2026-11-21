@@ -1,0 +1,32 @@
+# ===== 数据目录：绝不入库 =====
+data/
+output/
+批次/
+
+# ===== 任何问卷/扫描件/汇总表 =====
+*.pdf
+*.jpg
+*.jpeg
+*.png
+*.webp
+*.xlsx
+*.xls
+*.csv
+
+# ===== 配置与密钥（绝不入库）=====
+配置.json
+config.json
+.env
+*.key
+*.pem
+
+# ===== Python =====
+.venv/
+venv/
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+
+# ===== macOS =====
+.DS_Store
