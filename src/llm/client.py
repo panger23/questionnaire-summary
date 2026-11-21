@@ -93,6 +93,8 @@ class VisionClient:
                  timeout: float = 90.0):
         self.model = model
         self.usage = Usage()
+        self.last_error = ""      # 最后一次调用的报错原文
+        self.channel_error = ""   # 整批失败时置位，表示"LLM 通道整体不可用"
         self._client = OpenAI(base_url=api_base, api_key=api_key,
                               timeout=timeout, max_retries=2)
 
@@ -109,8 +111,9 @@ class VisionClient:
                 messages=[{"role": "user", "content": content}],
                 temperature=0,
             )
-        except Exception:  # noqa: BLE001 - 网络/额度/模型问题都按"这一行失败"处理
+        except Exception as exc:  # noqa: BLE001 - 网络/额度/模型问题都按"这一行失败"处理
             self.usage.failures += 1
+            self.last_error = f"{type(exc).__name__}: {str(exc)[:300]}"
             return None
         text = resp.choices[0].message.content or ""
         usage = getattr(resp, "usage", None)

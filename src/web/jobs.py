@@ -92,6 +92,9 @@ def _run(job: Job, client) -> None:
             }
         else:
             job.meta = {"mode": "纯代码模式（离线，未启用 LLM 复核）"}
+        if client is not None and getattr(client, "channel_error", ""):
+            job.meta["llm_error"] = client.channel_error
+            job.meta["mode"] = "纯代码模式（LLM 复核失败，已自动退回）"
         job.stage = "完成"
         job.status = "done"
     except Exception as exc:  # noqa: BLE001 - 任何异常都要反馈到界面上

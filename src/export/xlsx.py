@@ -16,7 +16,7 @@ import xlsxwriter
 from ..engine.pipeline import PageResult, average, group_by_branch
 
 DETAIL_COLUMNS = (
-    "序号", "页码", "分行", "组长助手", "审计组长",
+    "序号", "页码", "分行", "审计组长", "组长助手",
     "任务分工", "沟通协调", "团结协作", "专业技术", "关爱扶持",
     "合计", "LLM合计", "LLM标记数", "双通道一致", "标记",
 )
@@ -67,8 +67,8 @@ def build_workbook(results: list[PageResult], pdf_path: str, out_path: str | Pat
         ws.write_number(i + 1, 0, i + 1, row_fmt)
         ws.write_number(i + 1, 1, r.page, row_fmt)
         ws.write_string(i + 1, 2, r.header.project, row_left)
-        ws.write_string(i + 1, 3, r.header.assistant, row_fmt)
-        ws.write_string(i + 1, 4, r.header.lead, row_fmt)
+        ws.write_string(i + 1, 3, r.header.lead, row_fmt)
+        ws.write_string(i + 1, 4, r.header.assistant, row_fmt)
         for k, score in enumerate(r.scores):
             if score is None:
                 ws.write_blank(i + 1, COL_SCORE_FIRST + k, None, row_fmt)

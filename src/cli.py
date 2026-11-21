@@ -97,6 +97,12 @@ def main(argv: list[str] | None = None) -> int:
         print(f"{name:<28}{len(items):>5}{items[0].header.assistant:>10}"
               f"{_fmt_avg(average(items)):>12}")
 
+    if client is not None and getattr(client, "channel_error", ""):
+        print()
+        print(f"⚠️  LLM 复核整体失败，已退回纯代码模式：{client.channel_error}")
+        meta["llm_error"] = client.channel_error
+        meta["mode"] = "纯代码模式（LLM 复核失败，已自动退回）"
+
     if client is not None:
         agree = sum(1 for r in results if r.agree is True)
         disagree = sum(1 for r in results if r.agree is False)

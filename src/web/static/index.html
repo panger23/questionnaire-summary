@@ -251,7 +251,12 @@ function renderStats() {
   }
   if (s.cost != null) parts.push(`<span>花费 <b>¥${s.cost.toFixed(2)}</b></span>`);
   parts.push(`<span>模式 <b>${s.mode}</b></span>`);
-  $('#stat-line').innerHTML = parts.join('');
+  let tip = '';
+  if (s.llm_error) {
+    tip = `<div style="flex-basis:100%;color:#b91c1c;margin-top:6px">
+      ⚠️ LLM 复核整体失败，已自动退回纯代码模式（结果仍然有效）：${s.llm_error}</div>`;
+  }
+  $('#stat-line').innerHTML = parts.join('') + tip;
 }
 
 function renderSummary() {
@@ -275,7 +280,7 @@ function renderSummary() {
 
 function renderDetail() {
   let html = `<table><thead><tr>
-    <th>页码</th><th>分行</th><th>组长助手</th><th>审计组长</th>
+    <th>页码</th><th>分行</th><th>审计组长</th><th>组长助手</th>
     <th>任务分工</th><th>沟通协调</th><th>团结协作</th><th>专业技术</th><th>关爱扶持</th>
     <th>合计</th><th>LLM</th><th>标记数</th><th>一致</th><th>操作</th><th>标记说明</th>
   </tr></thead><tbody>`;
@@ -284,7 +289,7 @@ function renderDetail() {
     html += `<tr class="${flag ? 'flag' : ''}" data-page="${r.page}">`;
     const shortBranch = (r.branch || '-').replace(/^\d{4}年/, '').replace('常规审计', '');
     html += `<td>${r.page}</td><td style="text-align:left">${shortBranch}</td>
-             <td>${r.assistant || '-'}</td><td>${r.lead || '-'}</td>`;
+             <td>${r.lead || '-'}</td><td>${r.assistant || '-'}</td>`;
     r.scores.forEach((v, i) => {
       const diff = r.llm_scores && r.llm_scores[i] != null && r.llm_scores[i] !== v;
       const title = diff ? ` title="LLM 判为 ${r.llm_scores[i]}"` : '';

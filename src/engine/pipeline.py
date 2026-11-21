@@ -184,6 +184,15 @@ def process_pdf(pdf_path: str, dpi: int = 300, progress: Progress | None = None,
         for pi, slot in by_page.items():
             _apply_llm(results[pi], slot["scores"], slot["marks"])
 
+        # 整批大面积失败（额度/密钥/网络）时，不要给每一页都挂一条"LLM 没结果"，
+        # 那样 54 行全变黄反而看不清；改为一条整批提示。
+        total_calls = len(jobs)
+        if llm_client.usage.failures >= max(1, int(total_calls * 0.5)):
+            llm_client.channel_error = (llm_client.last_error
+                                        or "LLM 通道不可用（额度/密钥/网络问题）")
+            for r in results:
+                r.flags = [f for f in r.flags if f != "LLM 没有给出任何分数"]
+
     return results
 
 

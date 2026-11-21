@@ -87,6 +87,7 @@ def _snapshot(job) -> dict:
         "flagged_pages": [r.page for r in flagged],
         "mode": job.meta.get("mode", ""),
         "cost": job.meta.get("cost"),
+        "llm_error": job.meta.get("llm_error", ""),
         "agree": sum(1 for r in job.results if r.agree is True),
         "disagree": sum(1 for r in job.results if r.agree is False),
     }
