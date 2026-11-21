@@ -1,0 +1,32 @@
+name: 仓库守卫
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  no-data-files:
+    name: 禁止问卷数据入库
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: 检查仓库里有没有 PDF / 图片 / 表格 / 文档
+        run: |
+          hits=$(git ls-files | grep -Ei '\.(pdf|jpe?g|png|webp|bmp|tiff?|xlsx?|csv|docx?|pptx?)$' || true)
+          if [ -n "$hits" ]; then
+            echo "::error::仓库里出现了数据文件，请移出并执行 git rm --cached <文件>"
+            echo "$hits"
+            exit 1
+          fi
+          echo "OK：仓库中没有数据文件"
+
+  syntax:
+    name: 语法检查
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: 编译全部源码
+        run: python -m compileall -q src
