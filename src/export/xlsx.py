@@ -18,7 +18,7 @@ from ..engine.pipeline import PageResult, average, group_by_branch
 DETAIL_COLUMNS = (
     "序号", "页码", "分行", "组长助手", "审计组长",
     "任务分工", "沟通协调", "团结协作", "专业技术", "关爱扶持",
-    "合计", "LLM通道", "双通道一致", "标记",
+    "合计", "LLM合计", "双通道一致", "标记",
 )
 COL_TOTAL = 10  # 0 起：K 列，合计
 COL_SCORE_FIRST = 5
@@ -29,7 +29,8 @@ def _col_letter(index: int) -> str:
     return xlsxwriter.utility.xl_col_to_name(index)
 
 
-def build_workbook(results: list[PageResult], pdf_path: str, out_path: str | Path) -> Path:
+def build_workbook(results: list[PageResult], pdf_path: str, out_path: str | Path,
+                   meta: dict | None = None) -> Path:
     out_path = Path(out_path)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     wb = xlsxwriter.Workbook(str(out_path))
@@ -80,8 +81,13 @@ def build_workbook(results: list[PageResult], pdf_path: str, out_path: str | Pat
             ws.write_blank(i + 1, COL_TOTAL, None, row_fmt)
         else:
             ws.write_formula(i + 1, COL_TOTAL, formula, row_fmt, r.total)
-        ws.write_blank(i + 1, 11, None, row_fmt)  # LLM 通道（Step 2）
-        ws.write_blank(i + 1, 12, None, row_fmt)  # 双通道一致（Step 2）
+        ws.write_blank(i + 1, 11, None, row_fmt)  # 占位，下面按情况覆盖
+        if r.llm_total is not None:
+            ws.write_number(i + 1, 11, r.llm_total, row_fmt)
+        elif r.llm_scores is not None:
+            ws.write_string(i + 1, 11, "—", row_fmt)
+        agree_text = "" if r.agree is None else ("一致" if r.agree else "不一致")
+        ws.write_string(i + 1, 12, agree_text, row_fmt)
         ws.write_string(i + 1, 13, "；".join(r.flags) if r.flags else "", row_left)
 
     widths = {"A": 6, "B": 6, "C": 26, "D": 10, "E": 10,
@@ -131,16 +137,29 @@ def build_workbook(results: list[PageResult], pdf_path: str, out_path: str | Pat
 
     # ---------------- 说明 ----------------
     nf = wb.add_worksheet("说明")
+    meta = meta or {}
     flagged = [r for r in results if r.flags or r.total is None]
+    mode = meta.get("mode", "纯代码模式（离线，墨迹判列；未启用 LLM 复核）")
     rows: list[tuple[str, str]] = [
         ("项", "值"),
         ("源文件", Path(pdf_path).name),
         ("处理时间", datetime.now().strftime("%Y-%m-%d %H:%M:%S")),
         ("问卷份数", str(len(results))),
-        ("识别模式", "纯代码模式（离线，墨迹判列；未启用 LLM 复核）"),
+        ("识别模式", mode),
         ("需人工复核份数", str(len(flagged))),
         ("需复核页码", "、".join(str(r.page) for r in flagged) or "无"),
     ]
+    if meta.get("llm_calls") is not None:
+        agree = sum(1 for r in results if r.agree is True)
+        disagree = sum(1 for r in results if r.agree is False)
+        rows += [
+            ("LLM 模型", str(meta.get("model", ""))),
+            ("双通道一致 / 不一致", f"{agree} 份 / {disagree} 份"),
+            ("LLM 调用次数", f"{meta.get('llm_calls', 0)} 次，失败 {meta.get('llm_failures', 0)} 次"),
+            ("LLM 用量", f"输入 {meta.get('prompt_tokens', 0)} tokens，"
+                         f"输出 {meta.get('completion_tokens', 0)} tokens"),
+            ("LLM 预估花费", f"约 ¥{meta.get('cost', 0):.2f}"),
+        ]
     for name, items in branches:
         avg = average(items)
         rows.append((name, f"{len(items)} 份，平均分 {avg:.6f}" if avg is not None else "—"))

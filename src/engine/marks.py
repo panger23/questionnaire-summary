@@ -30,6 +30,7 @@ HAS_MARK_MIN_RATIO = 0.010  # 最高格墨量低于 1% 视为没勾
 AMBIGUOUS_SECOND_RATIO = 0.25  # 次高格 ≥ 最高格 25% 视为跨格
 
 SCORE_LABELS = ("10分", "9分", "8分", "7分", "6分", "5分", "4分", "3分", "2分", "1分")
+INDICATOR_NAMES = ("任务分工", "沟通协调", "团结协作", "专业技术", "关爱扶持")
 
 
 def _ink_ratio(mask: np.ndarray, y0: int, y1: int, x0: int, x1: int) -> float:
