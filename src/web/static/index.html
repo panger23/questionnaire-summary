@@ -132,7 +132,7 @@ async function loadConfig() {
     badge.textContent = '纯代码模式（未配置 Key）';
     badge.className = 'badge';
   }
-  $('#use-llm').checked = !!CONFIG.has_key;
+  $('#use-llm').checked = false;  // 默认不启用 LLM，需要时手动勾选
   $('#use-llm').disabled = !CONFIG.has_key;
 }
 
