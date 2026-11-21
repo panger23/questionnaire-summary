@@ -45,8 +45,8 @@
   tbody tr.flag{background:var(--warn)}
   tbody tr:hover{background:#f5f8ff}
   tbody tr.flag:hover{background:#fdf3cf}
-  td.note{text-align:left;white-space:normal;min-width:260px;max-width:420px;color:#7a5b00;font-size:12px}
-  td input{width:52px;text-align:center;font:inherit;border:1px solid #d7dbe2;border-radius:6px;padding:3px 4px}
+  td.note{text-align:left;white-space:normal;min-width:230px;max-width:360px;color:#7a5b00;font-size:12px;line-height:1.45}
+  td input{width:46px;text-align:center;font:inherit;border:1px solid #d7dbe2;border-radius:6px;padding:3px 4px}
   td input.diff{border-color:#f0a33c;background:#fff7ec}
   .muted{color:var(--muted);font-size:12px}
   .pill{display:inline-block;padding:1px 8px;border-radius:999px;font-size:12px}
@@ -280,7 +280,8 @@ function renderDetail() {
   DATA.rows.forEach(r => {
     const flag = (r.flags && r.flags.length) || r.total == null;
     html += `<tr class="${flag ? 'flag' : ''}" data-page="${r.page}">`;
-    html += `<td>${r.page}</td><td style="text-align:left">${r.branch || '-'}</td>
+    const shortBranch = (r.branch || '-').replace(/^\d{4}年/, '').replace('常规审计', '');
+    html += `<td>${r.page}</td><td style="text-align:left">${shortBranch}</td>
              <td>${r.assistant || '-'}</td><td>${r.lead || '-'}</td>`;
     r.scores.forEach((v, i) => {
       const diff = r.llm_scores && r.llm_scores[i] != null && r.llm_scores[i] !== v;
