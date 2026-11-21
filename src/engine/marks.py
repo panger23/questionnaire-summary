@@ -89,3 +89,10 @@ def sum_scores(readings: list[RowReading]) -> int | None:
     if any(r.score is None for r in readings):
         return None
     return int(sum(r.score for r in readings if r.score is not None))
+
+
+def top_two(ratios: list[float]) -> tuple[float, float, int, int]:
+    """返回 (最高墨量, 次高墨量, 最高格下标, 次高格下标)。"""
+    order = sorted(range(len(ratios)), key=lambda i: ratios[i], reverse=True)
+    best_i, second_i = order[0], order[1]
+    return ratios[best_i], ratios[second_i], best_i, second_i

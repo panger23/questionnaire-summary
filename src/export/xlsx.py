@@ -18,7 +18,7 @@ from ..engine.pipeline import PageResult, average, group_by_branch
 DETAIL_COLUMNS = (
     "序号", "页码", "分行", "组长助手", "审计组长",
     "任务分工", "沟通协调", "团结协作", "专业技术", "关爱扶持",
-    "合计", "LLM合计", "双通道一致", "标记",
+    "合计", "LLM合计", "LLM标记数", "双通道一致", "标记",
 )
 COL_TOTAL = 10  # 0 起：K 列，合计
 COL_SCORE_FIRST = 5
@@ -81,17 +81,23 @@ def build_workbook(results: list[PageResult], pdf_path: str, out_path: str | Pat
             ws.write_blank(i + 1, COL_TOTAL, None, row_fmt)
         else:
             ws.write_formula(i + 1, COL_TOTAL, formula, row_fmt, r.total)
-        ws.write_blank(i + 1, 11, None, row_fmt)  # 占位，下面按情况覆盖
         if r.llm_total is not None:
             ws.write_number(i + 1, 11, r.llm_total, row_fmt)
         elif r.llm_scores is not None:
             ws.write_string(i + 1, 11, "—", row_fmt)
+        else:
+            ws.write_blank(i + 1, 11, None, row_fmt)
+        if r.llm_marks is not None:
+            ws.write_string(i + 1, 12, "/".join(str(m) for m in r.llm_marks), row_fmt)
+        else:
+            ws.write_blank(i + 1, 12, None, row_fmt)
         agree_text = "" if r.agree is None else ("一致" if r.agree else "不一致")
-        ws.write_string(i + 1, 12, agree_text, row_fmt)
-        ws.write_string(i + 1, 13, "；".join(r.flags) if r.flags else "", row_left)
+        ws.write_string(i + 1, 13, agree_text, row_fmt)
+        ws.write_string(i + 1, 14, "；".join(r.flags) if r.flags else "", row_left)
 
     widths = {"A": 6, "B": 6, "C": 26, "D": 10, "E": 10,
-              "F": 9, "G": 9, "H": 9, "I": 9, "J": 9, "K": 8, "L": 9, "M": 10, "N": 46}
+              "F": 9, "G": 9, "H": 9, "I": 9, "J": 9, "K": 8, "L": 9,
+              "M": 12, "N": 10, "O": 52}
     for letter, width in widths.items():
         ws.set_column(f"{letter}:{letter}", width)
     ws.freeze_panes(1, 0)
@@ -167,7 +173,9 @@ def build_workbook(results: list[PageResult], pdf_path: str, out_path: str | Pat
         ("分数规则", "5 项勾选分值之和；手写总分、小计列、备注一律不读"),
         ("平均分规则", "五项齐全的有效问卷做算术平均"),
         ("勾选分值", "10/9/8/7/6/5/4/3/2/1 分"),
-        ("标黄含义", "该行存在需要人工确认的情况（墨迹跨格 / 缺勾 / 表头未识别）"),
+        ("标黄含义", "该行存在需要人工确认的情况（墨迹跨格 / 缺勾 / 表头未识别 / 双通道不一致）"),
+        ("多标记规则", "一行多个标记时取打勾（√）的那个，画叉（×）视为作废；"
+                       "仅当代码通道两格墨量都较重时才自动采用 LLM 判断"),
     ]
     for i, (key, value) in enumerate(rows):
         fmt_k = head_fmt if i == 0 else info_key

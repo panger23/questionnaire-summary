@@ -21,15 +21,19 @@ from .prep import annotate_row
 
 ROW_PROMPT = """这是一行纸质问卷的评分表格截图。中间一排共 10 个格子，每个格子正上方印着一个数字，从左到右依次是 10、9、8、7、6、5、4、3、2、1——这个数字就是该格代表的分值。
 
-其中恰好有一个格子里有填写人手写的勾（√）。请判断这个勾落在哪个数字所对应的格子里。
+填写人会在某一格里做标记，标记有两种形式：
+- 打勾（√）
+- 直接手写一个数字（例如在格子里写「8」）
 
-注意：
-- 请直接以格子上方印的数字为准，不要自己从头数格子。
-- 勾可能写得又长又斜，尾巴接近甚至越过右侧竖线，以笔迹主体（转折点/小圈/起笔处）所在的格子为准。
-- 若同一行有两个格子都有笔迹（例如一格画叉、一格打勾），打勾（√）的那个才是最终答案，画叉（×）视为作废。
-- 若一个格子都没有笔迹，score 返回 null。
+请判断这一行的最终分值，并数出这一行有几个格子里带有笔迹。
 
-只输出 JSON：{"score": 10}"""
+判断规则（按顺序执行）：
+1. 只要一行里有标记，就以标记所在的格子为准；标记是数字时，该格子上方的数字就是答案。
+2. 如果同一行有多个格子都有笔迹：打勾（√）的那个才是最终答案，画叉（×）的视为作废、不作数。
+3. 勾可能写得又长又斜，尾巴接近甚至越过右侧竖线——这仍然算 1 个标记，以笔迹主体（转折点/小圈/起笔处）所在的格子为准。
+4. 若一个格子都没有笔迹：score 返回 null，marks 返回 0。
+
+只输出 JSON，不要解释：{"score": 7, "marks": 2}"""
 
 
 @dataclass
@@ -45,8 +49,14 @@ class Usage:
         self.completion_tokens += completion_tokens
 
 
-def parse_score(text: str) -> int | None:
-    """从模型回复里抠出分值（1~10）；没有或格式不对返回 None。"""
+@dataclass
+class RowVerdict:
+    score: int | None
+    marks: int
+
+
+def parse_verdict(text: str) -> RowVerdict | None:
+    """从模型回复里抠出 {"score": 7, "marks": 2}；格式不对返回 None。"""
     if not text:
         return None
     match = re.search(r"\{.*\}", text, re.S)
@@ -56,14 +66,16 @@ def parse_score(text: str) -> int | None:
         data = json.loads(match.group(0))
     except json.JSONDecodeError:
         return None
-    score = data.get("score")
-    if score is None:
+    raw_score = data.get("score")
+    raw_marks = data.get("marks", 1)
+    if raw_score is None:
+        return RowVerdict(score=None, marks=0)
+    if isinstance(raw_score, float) and raw_score.is_integer():
+        raw_score = int(raw_score)
+    if not (isinstance(raw_score, int) and 1 <= raw_score <= 10):
         return None
-    if isinstance(score, float) and score.is_integer():
-        score = int(score)
-    if isinstance(score, int) and 1 <= score <= 10:
-        return score
-    return None
+    marks = raw_marks if isinstance(raw_marks, int) and 0 <= raw_marks <= 10 else 1
+    return RowVerdict(score=raw_score, marks=marks)
 
 
 def _png_bytes(rgb: np.ndarray) -> bytes:
@@ -84,8 +96,8 @@ class VisionClient:
         self._client = OpenAI(base_url=api_base, api_key=api_key,
                               timeout=timeout, max_retries=2)
 
-    def read_row(self, rgb: np.ndarray) -> int | None:
-        """读一行评分：返回分值 1~10，无法判断返回 None。"""
+    def read_row(self, rgb: np.ndarray) -> RowVerdict | None:
+        """读一行评分：返回 (分值, 标记数)，无法判断返回 None。"""
         b64 = base64.b64encode(_png_bytes(annotate_row(rgb))).decode("ascii")
         content = [
             {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{b64}"}},
@@ -104,7 +116,7 @@ class VisionClient:
         usage = getattr(resp, "usage", None)
         self.usage.add(getattr(usage, "prompt_tokens", 0) or 0,
                        getattr(usage, "completion_tokens", 0) or 0)
-        return parse_score(text)
+        return parse_verdict(text)
 
     def estimated_cost(self, input_price_per_m: float = 1.0,
                        output_price_per_m: float = 10.0) -> float:
