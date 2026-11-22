@@ -31,7 +31,7 @@ from .jobs import STORE, start_job
 
 STATIC_DIR = Path(__file__).parent / "static"
 
-app = FastAPI(title="审计问卷汇总")
+app = FastAPI(title="汇卷 · 扫描件智能汇总")
 
 MAX_UPLOAD_BYTES = 200 * 1024 * 1024  # 200MB
 
@@ -62,7 +62,7 @@ def _row(r) -> dict:
         "llm_marks": r.llm_marks,
         "llm_total": r.llm_total,
         "agree": r.agree,
-        "flags": r.flags,
+        "flags": [{"short": f.short, "detail": f.detail} for f in r.flags],
         "adopted": r.adopted,
         "grid_ok": r.grid_ok,
     }

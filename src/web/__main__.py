@@ -28,7 +28,7 @@ def main() -> None:
     port = _free_port()
     url = f"http://{HOST}:{port}"
     print()
-    print("  审计问卷汇总 · 已启动")
+    print("  汇卷 · 扫描件智能汇总　已启动")
     print(f"  地址：{url}")
     print("  关掉这个窗口就停止服务；数据只在内存里，不落盘")
     print()

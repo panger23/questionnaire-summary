@@ -55,7 +55,8 @@ class RowReading:
     row: int
     score: int | None  # None = 这行没找到勾
     ratios: list[float] = field(default_factory=list)
-    flags: list[str] = field(default_factory=list)
+    note: str = ""    # 一句话：这行有什么问题
+    detail: str = ""  # 技术细节（墨量等），界面上悬停才显示
 
 
 def read_indicator_rows(mask: np.ndarray, grid: Grid) -> list[RowReading]:
@@ -67,20 +68,19 @@ def read_indicator_rows(mask: np.ndarray, grid: Grid) -> list[RowReading]:
         best = ratios[best_i]
         rest = [r for i, r in enumerate(ratios) if i != best_i]
         second = max(rest) if rest else 0.0
-        flags: list[str] = []
-
         if best < HAS_MARK_MIN_RATIO:
             out.append(RowReading(row=row, score=None, ratios=ratios,
-                                  flags=["该行没有找到勾"]))
+                                  note="这一行没找到标记"))
             continue
 
+        note = detail = ""
         if second >= AMBIGUOUS_SECOND_RATIO * best:
-            flags.append(
-                f"墨迹跨格：{SCORE_LABELS[best_i]} 最重"
-                f"（{best:.2%}），{SCORE_LABELS[ratios.index(second)]} 次之（{second:.2%}）"
-            )
+            note = f"两个格子都有笔迹，暂取 {SCORE_LABELS[best_i]}，请确认"
+            detail = (f"{SCORE_LABELS[best_i]} 墨量 {best:.2%}，"
+                      f"{SCORE_LABELS[ratios.index(second)]} 墨量 {second:.2%}")
 
-        out.append(RowReading(row=row, score=10 - best_i, ratios=ratios, flags=flags))
+        out.append(RowReading(row=row, score=10 - best_i, ratios=ratios,
+                              note=note, detail=detail))
     return out
 
 

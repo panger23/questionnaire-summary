@@ -25,6 +25,17 @@ COL_SCORE_FIRST = 5
 COL_SCORE_LAST = 9
 
 
+def _flag_text(flags) -> str:
+    """每条待确认项一行，技术细节另起一行缩进，便于阅读。"""
+    parts = []
+    for f in flags:
+        text = f.short
+        if f.detail:
+            text += f"\n    ↳ {f.detail}"
+        parts.append(text)
+    return "\n".join(parts)
+
+
 def _col_letter(index: int) -> str:
     return xlsxwriter.utility.xl_col_to_name(index)
 
@@ -93,7 +104,7 @@ def build_workbook(results: list[PageResult], pdf_path: str, out_path: str | Pat
             ws.write_blank(i + 1, 12, None, row_fmt)
         agree_text = "" if r.agree is None else ("一致" if r.agree else "不一致")
         ws.write_string(i + 1, 13, agree_text, row_fmt)
-        ws.write_string(i + 1, 14, "；".join(r.flags) if r.flags else "", row_left)
+        ws.write_string(i + 1, 14, _flag_text(r.flags), row_left)
 
     widths = {"A": 6, "B": 6, "C": 26, "D": 10, "E": 10,
               "F": 9, "G": 9, "H": 9, "I": 9, "J": 9, "K": 8, "L": 9,

@@ -126,7 +126,8 @@ def main(argv: list[str] | None = None) -> int:
     if flagged:
         print(f"需要人工复核 {len(flagged)} 份：")
         for r in flagged:
-            print(f"  第 {r.page} 页（{r.header.project or '未知'}）：{'；'.join(r.flags) or '分数不全'}")
+            reason = "；".join(f.short for f in r.flags) or "分数不全"
+            print(f"  第 {r.page} 页（{r.header.project or '未知'}）：{reason}")
     else:
         print("没有需要人工复核的问卷。")
 

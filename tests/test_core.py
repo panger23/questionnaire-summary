@@ -60,7 +60,7 @@ class MarkTests(unittest.TestCase):
         readings = read_indicator_rows(mask, grid)
         self.assertEqual([r.score for r in readings], [10] * 5)
         self.assertEqual(sum_scores(readings), 50)
-        self.assertFalse(any(r.flags for r in readings))
+        self.assertFalse(any(r.note for r in readings))
 
     def test_mark_in_middle_column(self):
         mask = make_mask()
@@ -76,7 +76,7 @@ class MarkTests(unittest.TestCase):
         paint_cell(mask, INDICATOR_ROWS[0], 3, thickness=18)  # 再多画一个 7 分
         grid = Grid(h=H, v=V, ok=True)
         readings = read_indicator_rows(mask, grid)
-        self.assertTrue(readings[0].flags, "两个格子都有墨时必须标黄")
+        self.assertTrue(readings[0].note, "两个格子都有墨时必须给出提示")
         best, second, _, _ = top_two(readings[0].ratios)
         self.assertGreater(second / best, AMBIGUOUS_SECOND_RATIO)
 

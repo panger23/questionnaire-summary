@@ -3,100 +3,170 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>审计问卷汇总</title>
+<title>汇卷 · 扫描件智能汇总</title>
 <style>
   :root{
-    --bg:#f5f6f8; --card:#fff; --line:#e2e5ea; --text:#1f2328; --muted:#6b7280;
-    --primary:#2563eb; --primary-dark:#1d4ed8; --warn:#fff8dc; --warn-line:#e8c96a;
-    --ok:#15803d; --bad:#b91c1c;
+    --bg:#f5f6f8; --card:#fff; --line:#e8ebef; --line-strong:#d9dee5;
+    --text:#171a1f; --muted:#6b7280; --muted-2:#98a1ad;
+    --primary:#2563eb; --primary-dark:#1d4ed8; --primary-soft:#eef4ff;
+    --ok:#15803d; --ok-soft:#e7f6ec; --bad:#b91c1c; --bad-soft:#fdeaea;
+    --warn-bg:#fffdf5; --warn-chip:#fef3c7; --warn-text:#7a5b00;
   }
   *{box-sizing:border-box}
   body{margin:0;background:var(--bg);color:var(--text);
-       font:14px/1.6 -apple-system,"PingFang SC","Microsoft YaHei",sans-serif}
-  header{display:flex;align-items:center;gap:12px;padding:14px 22px;background:#fff;
-         border-bottom:1px solid var(--line);position:sticky;top:0;z-index:10}
-  header h1{font-size:16px;margin:0;font-weight:600}
-  .badge{font-size:12px;padding:3px 10px;border-radius:999px;background:#eef2ff;color:#3730a3}
-  .badge.llm{background:#e0f2fe;color:#075985}
+       font:14px/1.6 -apple-system,"PingFang SC","Microsoft YaHei",system-ui,sans-serif;
+       -webkit-font-smoothing:antialiased}
+
+  /* ---------- 顶栏 ---------- */
+  header{display:flex;align-items:center;gap:14px;padding:12px 26px;background:#fff;
+         border-bottom:1px solid var(--line);position:sticky;top:0;z-index:20}
+  .brand{display:flex;align-items:center;gap:11px}
+  .logo{width:34px;height:34px;border-radius:9px;display:grid;place-items:center;
+        background:linear-gradient(135deg,#2563eb,#4f46e5);color:#fff;
+        font-size:16px;font-weight:700;letter-spacing:-.5px}
+  .title{font-size:15px;font-weight:650;letter-spacing:.3px}
+  .sub{font-size:11.5px;color:var(--muted-2);margin-top:-1px}
   .spacer{flex:1}
-  button{font:inherit;cursor:pointer;border:1px solid var(--line);background:#fff;
-         border-radius:8px;padding:7px 14px;transition:.15s}
-  button:hover{background:#f3f4f6}
+  .badge{font-size:12px;padding:4px 11px;border-radius:999px;background:#f1f3f6;color:#5b6472}
+  .badge.llm{background:var(--primary-soft);color:#1e40af}
+
+  button{font:inherit;cursor:pointer;border:1px solid var(--line-strong);background:#fff;
+         color:var(--text);border-radius:9px;padding:8px 15px;transition:.15s}
+  button:hover{background:#f6f7f9;border-color:#c4cad3}
   button.primary{background:var(--primary);border-color:var(--primary);color:#fff}
   button.primary:hover{background:var(--primary-dark)}
   button:disabled{opacity:.45;cursor:not-allowed}
-  main{max-width:1240px;margin:22px auto 60px;padding:0 20px;display:flex;flex-direction:column;gap:16px}
-  .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:20px}
-  #dropzone{border:2px dashed #c7ccd4;border-radius:12px;padding:44px 20px;text-align:center;
-            color:var(--muted);cursor:pointer;transition:.15s}
-  #dropzone:hover,#dropzone.over{border-color:var(--primary);background:#f8faff;color:var(--primary)}
-  #dropzone b{color:var(--text);font-size:15px}
-  .row{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
-  .bar{height:10px;background:#eef0f3;border-radius:999px;overflow:hidden;margin-top:14px}
-  .bar>div{height:100%;width:0;border-radius:999px;
-    background:linear-gradient(90deg,#3b82f6,#2563eb);transition:width .35s ease}
-  .stat{display:flex;gap:22px;flex-wrap:wrap;font-size:13px;color:var(--muted);margin-bottom:14px}
-  .stat b{color:var(--text);font-size:15px}
-  .tabs{display:flex;gap:6px;margin-bottom:14px}
-  .tabs button.active{background:var(--primary);border-color:var(--primary);color:#fff}
-  .scroll{overflow:auto;border:1px solid var(--line);border-radius:10px;max-height:62vh}
-  table{border-collapse:collapse;width:100%;font-size:13px;background:#fff}
-  th,td{border-bottom:1px solid var(--line);padding:7px 10px;text-align:center;white-space:nowrap}
-  thead th{background:#f8fafc;position:sticky;top:0;z-index:2;font-weight:600}
-  tbody tr.flag{background:var(--warn)}
-  tbody tr:hover{background:#f5f8ff}
-  tbody tr.flag:hover{background:#fdf3cf}
-  td.note{text-align:left;white-space:normal;min-width:230px;max-width:360px;color:#7a5b00;font-size:12px;line-height:1.45}
-  td input{width:46px;text-align:center;font:inherit;border:1px solid #d7dbe2;border-radius:6px;padding:3px 4px}
-  td input.diff{border-color:#f0a33c;background:#fff7ec}
-  .muted{color:var(--muted);font-size:12px}
-  .pill{display:inline-block;padding:1px 8px;border-radius:999px;font-size:12px}
-  .pill.ok{background:#e7f6ec;color:var(--ok)}
-  .pill.bad{background:#fdeaea;color:var(--bad)}
-  .pill.none{background:#f1f2f4;color:var(--muted)}
-  .linkbtn{background:none;border:none;color:var(--primary);padding:2px 4px;font-size:12px}
-  .linkbtn:hover{text-decoration:underline;background:none}
-  #modal{position:fixed;inset:0;background:rgba(15,23,42,.55);display:flex;align-items:center;
-         justify-content:center;z-index:50;padding:24px}
-  #modal .box{background:#fff;border-radius:14px;max-width:1100px;width:100%;max-height:90vh;
-              overflow:auto;padding:16px}
-  #modal img{width:100%;display:block;border-radius:8px;border:1px solid var(--line)}
-  .modal-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
-  label.field{display:block;margin:12px 0 4px;font-size:13px;color:var(--muted)}
-  input.text{width:100%;font:inherit;padding:8px 10px;border:1px solid #d7dbe2;border-radius:8px}
-  .hint{font-size:12px;color:var(--muted);margin-top:6px}
-  .msg{margin-top:10px;font-size:13px}
-  .msg.ok{color:var(--ok)} .msg.bad{color:var(--bad)}
-  .mode-row{margin-top:18px;align-items:center;gap:12px}
-  .mode-label{font-size:14px;color:var(--text)}
+
+  main{max-width:1200px;margin:26px auto 70px;padding:0 22px;display:flex;flex-direction:column;gap:18px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;
+        padding:22px;box-shadow:0 1px 2px rgba(16,24,40,.03),0 8px 24px -18px rgba(16,24,40,.25)}
+
+  /* ---------- 上传区 ---------- */
+  #dropzone{border:1.5px dashed #cbd2dc;border-radius:12px;padding:42px 20px;text-align:center;
+            color:var(--muted);cursor:pointer;transition:.18s;background:#fafbfc}
+  #dropzone:hover,#dropzone.over{border-color:var(--primary);background:var(--primary-soft);color:var(--primary)}
+  #dropzone .big{font-size:15px;font-weight:600;color:var(--text);margin-bottom:3px}
+  #dropzone:hover .big,#dropzone.over .big{color:var(--primary)}
+
+  .row{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+  .mode-row{margin-top:18px}
+  .mode-label{font-size:13.5px;color:var(--muted)}
   .select-wrap{position:relative;display:inline-flex;align-items:center}
   .select-wrap::after{content:"";position:absolute;right:14px;width:7px;height:7px;
     border-right:1.6px solid #8b93a1;border-bottom:1.6px solid #8b93a1;
     transform:rotate(45deg) translateY(-2px);pointer-events:none;transition:border-color .15s}
   .select-wrap:hover::after{border-color:#5b6472}
-  select{appearance:none;-webkit-appearance:none;font:inherit;font-size:14px;
-    padding:8px 36px 8px 13px;border:1px solid #d7dbe2;border-radius:9px;background:#fff;
-    color:var(--text);cursor:pointer;outline:none;min-width:196px;
+  select{appearance:none;-webkit-appearance:none;font:inherit;font-size:13.5px;
+    padding:8px 36px 8px 13px;border:1px solid var(--line-strong);border-radius:9px;background:#fff;
+    color:var(--text);cursor:pointer;outline:none;min-width:210px;
     transition:border-color .15s,box-shadow .15s}
-  select:hover{border-color:#b9c0ca}
-  select:focus{border-color:var(--primary);box-shadow:0 0 0 3px rgba(37,99,235,.12)}
+  select:hover{border-color:#c4cad3}
+  select:focus{border-color:var(--primary);box-shadow:0 0 0 3px rgba(37,99,235,.1)}
   select:disabled{background:#f5f6f8;color:var(--muted);cursor:not-allowed}
+
+  /* ---------- 进度 ---------- */
+  #progress-text{font-size:14px;font-weight:600}
+  #progress-sub{font-size:13px;color:var(--muted);font-variant-numeric:tabular-nums}
+  .bar{height:10px;background:#eef0f3;border-radius:999px;overflow:hidden;margin-top:14px}
+  .bar>div{height:100%;width:0;border-radius:999px;
+    background:linear-gradient(90deg,#3b82f6,#2563eb);transition:width .35s ease}
+
+  /* ---------- 结果 ---------- */
+  .metrics{display:flex;flex-wrap:wrap;gap:26px;margin-bottom:18px}
+  .metric .k{display:block;font-size:11.5px;color:var(--muted-2);letter-spacing:.4px}
+  .metric .v{font-size:16px;font-weight:650;font-variant-numeric:tabular-nums}
+  .metric .v.small{font-size:13px;font-weight:500;color:var(--muted)}
+
+  .tabs{display:flex;align-items:center;gap:8px;margin-bottom:16px}
+  .tab{background:#f2f4f7;border:1px solid transparent;border-radius:9px;padding:7px 16px;
+       font-size:13.5px;color:#5b6472}
+  .tab.active{background:var(--primary);color:#fff}
+
+  .scroll{overflow:auto;border:1px solid var(--line);border-radius:12px;max-height:64vh}
+  table{border-collapse:separate;border-spacing:0;width:100%;font-size:13px;background:#fff}
+  th,td{padding:9px 12px;text-align:center;white-space:nowrap}
+  thead th{background:#f8fafc;position:sticky;top:0;z-index:3;font-weight:600;font-size:12.5px;
+           color:#48505d;border-bottom:1px solid var(--line)}
+  tbody td{border-bottom:1px solid #f0f2f5}
+  tbody tr:last-child td{border-bottom:none}
+  tbody tr:hover td{background:#f8fbff}
+  tbody tr.flag-row td{background:var(--warn-bg)}
+  tbody tr.flag-row td:first-child{box-shadow:inset 3px 0 0 #f0b429}
+
+  td input{width:48px;text-align:center;font:inherit;font-size:13px;
+    border:1px solid var(--line-strong);border-radius:7px;padding:4px 2px;outline:none;
+    transition:border-color .15s,box-shadow .15s}
+  td input:focus{border-color:var(--primary);box-shadow:0 0 0 3px rgba(37,99,235,.12)}
+  td input.diff{border-color:#f0a33c;background:#fffaf0}
+
+  td.flags-cell{text-align:left;white-space:normal;min-width:250px;max-width:360px;padding-right:16px}
+  .flag{display:block;font-size:12px;line-height:1.5;color:var(--warn-text);
+        background:var(--warn-chip);border-radius:7px;padding:4px 9px;margin:3px 0;cursor:help}
+  .flag + .flag{margin-top:5px}
+
+  .todo{border:1px solid #fde68a;background:#fffdf5;border-radius:12px;padding:14px 16px 10px;margin-bottom:14px}
+  .todo-head{font-size:13px;font-weight:600;color:#92400e;margin-bottom:8px}
+  .todo-item{display:flex;align-items:flex-start;gap:12px;padding:8px 0;border-top:1px dashed #f3e3b5;
+             font-size:12.5px;cursor:pointer;border-radius:6px}
+  .todo-item:first-of-type{border-top:none}
+  .todo-item:hover{background:#fff8e3}
+  .todo-page{font-weight:600;color:#7a5b00;white-space:nowrap;min-width:56px}
+  .todo-branch{color:#9a7b2e;white-space:nowrap;min-width:64px}
+  .todo-flags{flex:1;display:flex;flex-direction:column;align-items:flex-start;gap:5px;min-width:0}
+  .todo-flags .flag{margin:0;display:inline-block}
+  .dot{display:inline-block;width:6px;height:6px;border-radius:50%;background:#f0b429;
+       margin-left:5px;vertical-align:middle}
+  .pill{display:inline-block;padding:2px 9px;border-radius:999px;font-size:12px;font-weight:500}
+  .pill.ok{background:var(--ok-soft);color:var(--ok)}
+  .pill.bad{background:var(--bad-soft);color:var(--bad)}
+  .pill.none{background:#f1f2f4;color:var(--muted-2)}
+  .muted{color:var(--muted);font-size:12px;font-variant-numeric:tabular-nums}
+
+  .linkbtn{background:none;border:none;color:var(--primary);padding:2px 5px;font-size:12.5px;border-radius:6px}
+  .linkbtn:hover{background:var(--primary-soft)}
+
+  .banner{display:flex;align-items:flex-start;gap:8px;margin:0 0 14px;padding:10px 14px;
+          border-radius:10px;font-size:13px;line-height:1.55}
+  .banner.warn{background:#fffbeb;color:#92400e;border:1px solid #fde68a}
+  .banner.danger{background:#fef2f2;color:#991b1b;border:1px solid #fecaca}
+
+  /* ---------- 弹窗 ---------- */
+  #modal{position:fixed;inset:0;background:rgba(15,23,42,.5);backdrop-filter:blur(2px);
+         display:flex;align-items:center;justify-content:center;z-index:50;padding:24px}
+  #modal .box{background:#fff;border-radius:16px;max-width:1080px;width:100%;max-height:90vh;
+              overflow:auto;padding:22px;box-shadow:0 24px 60px -12px rgba(16,24,40,.35)}
+  #modal img{width:100%;display:block;border-radius:10px;border:1px solid var(--line)}
+  .modal-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
+  .modal-head b{font-size:15px}
+  label.field{display:block;margin:16px 0 6px;font-size:13px;color:var(--muted)}
+  input.text{width:100%;font:inherit;padding:9px 12px;border:1px solid var(--line-strong);
+             border-radius:9px;outline:none;transition:border-color .15s,box-shadow .15s}
+  input.text:focus{border-color:var(--primary);box-shadow:0 0 0 3px rgba(37,99,235,.1)}
+  .hint{font-size:12px;color:var(--muted-2);margin-top:8px;line-height:1.6}
+  .msg{margin-top:12px;font-size:13px}
+  .msg.ok{color:var(--ok)} .msg.bad{color:var(--bad)}
   .hidden{display:none !important}
 </style>
 </head>
 <body>
 <header>
-  <h1>审计问卷汇总</h1>
-  <span id="mode-badge" class="badge">未配置</span>
+  <div class="brand">
+    <div class="logo">汇</div>
+    <div>
+      <div class="title">汇卷</div>
+      <div class="sub">扫描件智能汇总</div>
+    </div>
+  </div>
   <span class="spacer"></span>
+  <span id="mode-badge" class="badge">未配置</span>
   <button id="btn-settings">设置</button>
 </header>
 
 <main>
   <section class="card" id="upload-card">
     <div id="dropzone">
-      <b>把扫描好的 PDF 拖进来</b><br>
-      或者点击这里选择文件
+      <div class="big">把扫描好的 PDF 拖进来</div>
+      <div>或点击这里选择文件</div>
     </div>
     <input type="file" id="file" accept="application/pdf" hidden>
     <div class="row mode-row">
@@ -114,18 +184,20 @@
 
   <section class="card hidden" id="progress-card">
     <div class="row"><b id="progress-text">准备中…</b><span class="spacer"></span>
-      <span class="muted" id="progress-sub"></span></div>
+      <span id="progress-sub"></span></div>
     <div class="bar"><div id="bar-fill"></div></div>
   </section>
 
   <section class="card hidden" id="result-card">
-    <div class="stat" id="stat-line"></div>
+    <div class="metrics" id="stat-line"></div>
     <div class="tabs">
-      <button data-tab="summary" class="active">汇总</button>
-      <button data-tab="detail">明细（可改分）</button>
+      <button class="tab active" data-tab="summary">汇总</button>
+      <button class="tab" data-tab="detail">明细（可改分）</button>
       <span class="spacer"></span>
       <button class="primary" id="btn-download">下载 Excel</button>
     </div>
+    <div id="flash"></div>
+    <div id="todo"></div>
     <div id="tab-summary" class="scroll"></div>
     <div id="tab-detail" class="scroll hidden"></div>
   </section>
@@ -138,6 +210,7 @@
 
 <script>
 const $ = (s, r = document) => r.querySelector(s);
+const esc = (v) => String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 let JOB = null, DATA = null, CONFIG = null, polling = null;
 const PENDING = new Set();
 async function flushEdits() { while (PENDING.size) { await Promise.all([...PENDING]); } }
@@ -150,29 +223,27 @@ async function loadConfig() {
     badge.textContent = 'LLM 可用 · ' + CONFIG.key_masked;
     badge.className = 'badge llm';
   } else {
-    badge.textContent = '纯代码模式（未配置 Key）';
+    badge.textContent = '纯本地模式';
     badge.className = 'badge';
   }
-  const modeSel = $('#mode');
-  modeSel.value = 'code';  // 默认纯本地，不调用 LLM
-  modeSel.querySelectorAll('option[value="flagged"], option[value="all"]')
+  const sel = $('#mode');
+  sel.value = 'code';
+  sel.querySelectorAll('option[value="flagged"], option[value="all"]')
     .forEach(o => { o.disabled = !CONFIG.has_key; });
-  $('#mode-hint').textContent = CONFIG.has_key
-    ? ''
-    : '未配置 API Key，只能用纯本地模式';
+  $('#mode-hint').textContent = CONFIG.has_key ? '' : '未配置 API Key，只能纯本地识别';
 }
 
 function openSettings() {
   $('#modal-title').textContent = '设置';
   $('#modal-body').innerHTML = `
     <label class="field">API 地址</label>
-    <input class="text" id="cfg-base" value="${CONFIG.api_base}">
+    <input class="text" id="cfg-base" value="${esc(CONFIG.api_base)}">
     <label class="field">模型名</label>
-    <input class="text" id="cfg-model" value="${CONFIG.model}">
+    <input class="text" id="cfg-model" value="${esc(CONFIG.model)}">
     <label class="field">API Key</label>
     <input class="text" id="cfg-key" type="password" placeholder="sk-...">
     <div class="hint">Key 只保存在本机配置文件里，不会上传到任何地方，也不会进版本库；留空保存表示不修改。</div>
-    <div class="row" style="margin-top:16px">
+    <div class="row" style="margin-top:18px">
       <button class="primary" id="cfg-save">保存</button>
       <button id="cfg-test">测试连接</button>
       <button id="cfg-clear">清除 Key</button>
@@ -188,7 +259,7 @@ function openSettings() {
     });
     CONFIG = await r.json();
     $('#cfg-msg').className = 'msg ok';
-    $('#cfg-msg').textContent = '已保存。';
+    $('#cfg-msg').textContent = '已保存';
     await loadConfig();
   };
   $('#cfg-test').onclick = async () => {
@@ -201,7 +272,7 @@ function openSettings() {
   $('#cfg-clear').onclick = async () => {
     CONFIG = await (await fetch('/api/config/clear', {method: 'POST'})).json();
     $('#cfg-msg').className = 'msg ok';
-    $('#cfg-msg').textContent = 'Key 已清除，将使用纯代码模式。';
+    $('#cfg-msg').textContent = '已清除 Key，将使用纯本地识别';
     await loadConfig();
   };
 }
@@ -213,6 +284,7 @@ async function upload(file) {
   $('#result-card').classList.add('hidden');
   $('#progress-card').classList.remove('hidden');
   $('#progress-text').textContent = '上传中…';
+  $('#progress-sub').textContent = '';
   $('#bar-fill').style.width = '0%';
 
   const fd = new FormData();
@@ -258,45 +330,37 @@ function poll() {
   }, 900);
 }
 
-/* ---------------- 结果渲染 ---------------- */
+/* ---------------- 结果 ---------------- */
 async function showResult() {
   DATA = await (await fetch(`/api/jobs/${JOB}/result`)).json();
   $('#result-card').classList.remove('hidden');
-  renderStats();
-  renderSummary();
-  renderDetail();
+  renderStats(); renderTodo(); renderSummary(); renderDetail();
 }
 
 function renderStats() {
   const s = DATA.stats;
-  const parts = [
-    `<span>份数 <b>${s.pages}</b></span>`,
-    `<span>待确认 <b style="color:${s.flagged ? '#b45309' : '#15803d'}">${s.flagged}</b></span>`,
-  ];
-  if (s.agree + s.disagree > 0) {
-    parts.push(`<span>双通道一致 <b>${s.agree}</b> / 不一致 <b>${s.disagree}</b></span>`);
-  }
-  if (s.cost != null) parts.push(`<span>花费 <b>¥${s.cost.toFixed(2)}</b></span>`);
-  parts.push(`<span>模式 <b>${s.mode}</b></span>`);
-  let tip = '';
-  if (s.llm_warning) {
-    tip += `<div style="flex-basis:100%;color:#b45309;margin-top:6px">⚠️ ${s.llm_warning}</div>`;
-  }
-  if (s.llm_error) {
-    tip = `<div style="flex-basis:100%;color:#b91c1c;margin-top:6px">
-      ⚠️ LLM 复核整体失败，已自动退回纯代码模式（结果仍然有效）：${s.llm_error}</div>`;
-  }
-  $('#stat-line').innerHTML = parts.join('') + tip;
+  const items = [['份数', s.pages], ['待确认', s.flagged]];
+  if (s.agree + s.disagree > 0) items.push(['双通道一致 / 不一致', `${s.agree} / ${s.disagree}`]);
+  if (s.cost != null) items.push(['花费', `¥${s.cost.toFixed(2)}`]);
+  items.push(['模式', s.mode, true]);
+  $('#stat-line').innerHTML = items.map(([k, v, small]) =>
+    `<div class="metric"><span class="k">${k}</span><span class="v${small ? ' small' : ''}">${esc(v)}</span></div>`
+  ).join('');
+
+  let banner = '';
+  if (s.llm_warning) banner += `<div class="banner warn">⚠️ ${esc(s.llm_warning)}</div>`;
+  if (s.llm_error) banner += `<div class="banner danger">⚠️ LLM 复核失败，已自动退回纯本地识别（结果仍然有效）：${esc(s.llm_error)}</div>`;
+  $('#flash').innerHTML = banner;
 }
 
 function renderSummary() {
   const branches = DATA.summary;
   const maxN = Math.max(...branches.map(b => b.scores.length));
   let html = '<table><thead><tr><th>序号</th>';
-  branches.forEach(b => html += `<th>${b.branch}</th>`);
+  branches.forEach(b => html += `<th>${esc(b.branch)}</th>`);
   html += '</tr></thead><tbody>';
   html += '<tr><td><b>组员数量</b></td>' + branches.map(b => `<td><b>${b.count}</b></td>`).join('') + '</tr>';
-  html += '<tr><td><b>代职人</b></td>' + branches.map(b => `<td>${b.assistant || '-'}</td>`).join('') + '</tr>';
+  html += '<tr><td><b>代职人</b></td>' + branches.map(b => `<td>${esc(b.assistant || '-')}</td>`).join('') + '</tr>';
   for (let i = 0; i < maxN; i++) {
     html += `<tr><td>${i + 1}</td>`;
     branches.forEach(b => html += `<td>${b.scores[i] ?? ''}</td>`);
@@ -308,34 +372,59 @@ function renderSummary() {
   $('#tab-summary').innerHTML = html;
 }
 
+function renderTodo() {
+  const items = DATA.rows.filter(r => (r.flags && r.flags.length) || r.total == null);
+  if (!items.length) { $('#todo').innerHTML = ''; return; }
+  const rowsHtml = items.map(r => {
+    const shortBranch = (r.branch || '-').replace(/^\d{4}年/, '').replace('常规审计', '');
+    const flags = (r.flags && r.flags.length)
+      ? r.flags.map(f => `<span class="flag" title="${esc(f.detail || f.short)}">${esc(f.short)}</span>`).join('')
+      : '<span class="flag">这一页分数不全，请手动补</span>';
+    return `<div class="todo-item" data-jump="${r.page}">
+      <span class="todo-page">第 ${r.page} 页</span>
+      <span class="todo-branch">${esc(shortBranch)}</span>
+      <span class="todo-flags">${flags}</span>
+      <button class="linkbtn" data-todoimg="${r.page}">看原图</button>
+    </div>`;
+  }).join('');
+  $('#todo').innerHTML = `<div class="todo"><div class="todo-head">待确认 ${items.length} 份 · 点一行可跳到表里那一行</div>${rowsHtml}</div>`;
+  $('#todo').querySelectorAll('[data-jump]').forEach(el => {
+    el.onclick = (e) => {
+      if (e.target.dataset.todoimg) return;
+      document.querySelector('[data-tab=detail]').click();
+      const row = $(`#tab-detail tr[data-page="${el.dataset.jump}"]`);
+      if (row) row.scrollIntoView({block: 'center', behavior: 'smooth'});
+    };
+  });
+  $('#todo').querySelectorAll('[data-todoimg]').forEach(b => {
+    b.onclick = (e) => { e.stopPropagation(); showImage(+b.dataset.todoimg); };
+  });
+}
+
 function renderDetail() {
   let html = `<table><thead><tr>
     <th>页码</th><th>分行</th><th>审计组长</th><th>组长助手</th>
     <th>任务分工</th><th>沟通协调</th><th>团结协作</th><th>专业技术</th><th>关爱扶持</th>
-    <th>合计</th><th>LLM</th><th>标记数</th><th>一致</th><th>操作</th><th>标记说明</th>
+    <th>合计</th><th>LLM</th><th>一致</th><th>操作</th>
   </tr></thead><tbody>`;
   DATA.rows.forEach(r => {
-    const flag = (r.flags && r.flags.length) || r.total == null;
-    html += `<tr class="${flag ? 'flag' : ''}" data-page="${r.page}">`;
+    const flagged = (r.flags && r.flags.length) || r.total == null;
     const shortBranch = (r.branch || '-').replace(/^\d{4}年/, '').replace('常规审计', '');
-    html += `<td>${r.page}</td><td style="text-align:left">${shortBranch}</td>
-             <td>${r.lead || '-'}</td><td>${r.assistant || '-'}</td>`;
+    html += `<tr class="${flagged ? 'flag-row' : ''}" data-page="${r.page}">`;
+    html += `<td>${r.page}${flagged ? '<span class="dot" title="待确认"></span>' : ''}</td><td>${esc(shortBranch)}</td><td>${esc(r.lead || '-')}</td><td>${esc(r.assistant || '-')}</td>`;
     r.scores.forEach((v, i) => {
       const diff = r.llm_scores && r.llm_scores[i] != null && r.llm_scores[i] !== v;
+      const cls = (v == null || diff) ? ' class="diff"' : '';
       const title = diff ? ` title="LLM 判为 ${r.llm_scores[i]}"` : '';
-      html += `<td><input type="number" min="1" max="10" value="${v ?? ''}" ${v == null ? 'class="diff"' : (diff ? 'class="diff"' : '')}
+      html += `<td><input type="number" min="1" max="10" value="${v ?? ''}"${cls}
                data-page="${r.page}" data-row="${i}"${title}></td>`;
     });
     const pill = r.agree == null ? '<span class="pill none">—</span>'
       : (r.agree ? '<span class="pill ok">一致</span>' : '<span class="pill bad">不一致</span>');
-    html += `<td><b>${r.total ?? '-'}</b></td>
-             <td>${r.llm_total ?? '-'}</td>
-             <td class="muted">${r.llm_marks ? r.llm_marks.join('/') : '-'}</td>
-             <td>${pill}</td>
+    html += `<td><b>${r.total ?? '-'}</b></td><td class="muted">${r.llm_total ?? '-'}</td><td>${pill}</td>
              <td><button class="linkbtn" data-img="${r.page}">看原图</button>${
                r.agree === false && r.llm_scores ? `<button class="linkbtn" data-adopt="${r.page}">采用LLM</button>` : ''}</td>
-             <td class="note">${(r.flags || []).join('；')}</td>`;
-    html += '</tr>';
+             </tr>`;
   });
   html += '</tbody></table>';
   const box = $('#tab-detail');
@@ -356,14 +445,10 @@ function renderDetail() {
         if (!resp.ok) { alert('修改失败'); return; }
         await refreshAfterEdit(await resp.json());
       })();
-      PENDING.add(task);
-      task.finally(() => PENDING.delete(task));
-      await task;
+      PENDING.add(task); task.finally(() => PENDING.delete(task)); await task;
     };
   });
-  box.querySelectorAll('[data-img]').forEach(btn => {
-    btn.onclick = () => showImage(+btn.dataset.img);
-  });
+  box.querySelectorAll('[data-img]').forEach(btn => btn.onclick = () => showImage(+btn.dataset.img));
   box.querySelectorAll('[data-adopt]').forEach(btn => {
     btn.onclick = async () => {
       const resp = await fetch(`/api/jobs/${JOB}/adopt`, {
@@ -383,18 +468,16 @@ async function refreshAfterEdit(resp) {
   }
   DATA.summary = resp.summary;
   DATA.stats = resp.stats;
-  renderStats();
-  renderSummary();
-  renderDetail();
+  renderStats(); renderSummary(); renderDetail();
 }
 
 function showImage(page) {
-  $('#modal-title').textContent = `第 ${page} 页原图（可对照改分）`;
+  $('#modal-title').textContent = `第 ${page} 页原图`;
   $('#modal-body').innerHTML = `<img src="/api/jobs/${JOB}/page/${page}" alt="第${page}页">`;
   $('#modal').classList.remove('hidden');
 }
 
-/* ---------------- 事件绑定 ---------------- */
+/* ---------------- 事件 ---------------- */
 const dz = $('#dropzone');
 dz.onclick = () => $('#file').click();
 $('#file').onchange = e => upload(e.target.files[0]);
@@ -413,9 +496,9 @@ $('#btn-download').onclick = async () => {
   await flushEdits();
   if (JOB) window.location = `/api/jobs/${JOB}/download`;
 };
-document.querySelectorAll('.tabs [data-tab]').forEach(btn => {
+document.querySelectorAll('[data-tab]').forEach(btn => {
   btn.onclick = () => {
-    document.querySelectorAll('.tabs [data-tab]').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('[data-tab]').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
     const tab = btn.dataset.tab;
     $('#tab-summary').classList.toggle('hidden', tab !== 'summary');

@@ -34,6 +34,13 @@ Progress = Callable[[int, int], None]
 AUTO_ADOPT_RATIO = 0.5
 
 
+@dataclass(frozen=True)
+class Flag:
+    """一条待确认项：short 给用户看，detail 是技术依据（悬停显示）。"""
+    short: str
+    detail: str = ""
+
+
 @dataclass
 class PageResult:
     page: int
@@ -41,7 +48,7 @@ class PageResult:
     readings: list[RowReading]
     total: int | None
     grid_ok: bool
-    flags: list[str] = field(default_factory=list)
+    flags: list[Flag] = field(default_factory=list)
     # LLM 通道（未启用时为 None）
     llm_scores: list[int | None] | None = None
     llm_marks: list[int] | None = None
@@ -75,17 +82,19 @@ def _apply_llm(r: PageResult, scores: list[int | None], marks: list[int]) -> Non
     r.llm_scores = scores
     r.llm_marks = marks
     if all(s is None for s in scores):
-        r.flags.append("LLM 没有给出任何分数")
+        r.flags.append(Flag("LLM 复核失败，这页按本地识别结果处理"))
         return
 
-    diffs: list[str] = []
+    diffs = 0
     for i, (a, b) in enumerate(zip(r.scores, scores)):
         if a == b:
             continue
         name = INDICATOR_NAMES[i]
         if a is None or b is None:
-            diffs.append(f"{name}：代码 {a if a is not None else '?'} / "
-                         f"LLM {b if b is not None else '?'}")
+            r.flags.append(Flag(f"{name}：两个通道结论不一致，请确认",
+                                f"本地 {a if a is not None else '未识别'} / "
+                                f"LLM {b if b is not None else '未识别'}"))
+            diffs += 1
             continue
         ratios = r.readings[i].ratios
         best, second, _best_i, second_i = top_two(ratios)
@@ -94,20 +103,20 @@ def _apply_llm(r: PageResult, scores: list[int | None], marks: list[int]) -> Non
         if ratio >= AUTO_ADOPT_RATIO and marks[i] >= 2 and b == second_score:
             r.readings[i].score = b
             r.adopted.append(f"{name} {a}→{b}")
+            r.flags.append(Flag(
+                f"{name}：两个格子都有标记，已按「打勾优先、画叉作废」取 {b} 分",
+                f"本地判 {a}、LLM 判 {b}；两格墨量 {best:.2%} / {second:.2%}"))
             continue
-        diffs.append(
-            f"{name}：代码 {a} / LLM {b}"
-            f"（两格墨量 {best:.2%} / {second:.2%}，更像笔迹尾巴，未自动采用）"
-        )
+        diffs += 1
+        r.flags.append(Flag(
+            f"{name}：本地 {a} 分、LLM {b} 分，暂按本地结果",
+            f"两格墨量 {best:.2%} / {second:.2%}，更像勾的尾巴扫过，未自动采用 LLM 判断"
+        ))
 
     r.total = sum_scores(r.readings)
     if all(s is not None for s in scores):
         r.llm_total = int(sum(s for s in scores if s is not None))
 
-    if r.adopted:
-        r.flags.append("已按『多个标记取√、×作废』规则采用 LLM 判断：" + "；".join(r.adopted))
-    if diffs:
-        r.flags.append("双通道不一致 —— " + "；".join(diffs))
     # 采用过 LLM 判断的页，本质仍是"两通道不一致"，只是已经按规则裁决过了
     r.agree = not (diffs or r.adopted)
 
@@ -129,7 +138,8 @@ def process_pdf(pdf_path: str, dpi: int = 300, progress: Progress | None = None,
         if not grid.ok:
             results.append(
                 PageResult(page=page_no, header=Header("", "", ""), readings=[],
-                           total=None, grid_ok=False, flags=[grid.note],
+                           total=None, grid_ok=False,
+                           flags=[Flag("这一页的表格没找到，请人工核对", grid.note)],
                            grid_h=list(grid.h), grid_v=list(grid.v))
             )
             if progress:
@@ -137,7 +147,10 @@ def process_pdf(pdf_path: str, dpi: int = 300, progress: Progress | None = None,
             continue
 
         readings = read_indicator_rows(mask, grid)
-        flags = [f"{INDICATOR_NAMES[r.row - 4]}：{msg}" for r in readings for msg in r.flags]
+        flags = [
+            Flag(f"{INDICATOR_NAMES[r.row - 4]}：{r.note}", r.detail)
+            for r in readings if r.note
+        ]
 
         header = parse_header(header_crop(gray, grid))
         cached = header_cache.get(header.key())
@@ -146,9 +159,9 @@ def process_pdf(pdf_path: str, dpi: int = 300, progress: Progress | None = None,
         else:
             header_cache[header.key()] = header
             if not header.project:
-                flags.append("表头项目名称未识别出来")
+                flags.append(Flag("表头的「项目名称」没认出来", "这一列的 OCR 结果为空"))
             if not header.assistant:
-                flags.append("表头组长助手未识别出来")
+                flags.append(Flag("表头的「组长助手」没认出来", "这一列的 OCR 结果为空"))
 
         results.append(
             PageResult(page=page_no, header=header, readings=readings,
@@ -195,7 +208,7 @@ def process_pdf(pdf_path: str, dpi: int = 300, progress: Progress | None = None,
             llm_client.channel_error = (llm_client.last_error
                                         or "LLM 通道不可用（额度/密钥/网络问题）")
             for r in results:
-                r.flags = [f for f in r.flags if f != "LLM 没有给出任何分数"]
+                r.flags = [f for f in r.flags if "LLM 复核失败" not in f.short]
         elif failures:
             llm_client.partial_warning = (
                 f"{failures}/{total_calls} 次 LLM 调用失败（多为超时/限流），"
