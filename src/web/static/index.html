@@ -32,8 +32,9 @@
   #dropzone:hover,#dropzone.over{border-color:var(--primary);background:#f8faff;color:var(--primary)}
   #dropzone b{color:var(--text);font-size:15px}
   .row{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
-  .bar{height:8px;background:#eef0f3;border-radius:999px;overflow:hidden;margin-top:12px}
-  .bar>div{height:100%;width:0;background:var(--primary);transition:width .3s}
+  .bar{height:10px;background:#eef0f3;border-radius:999px;overflow:hidden;margin-top:14px}
+  .bar>div{height:100%;width:0;border-radius:999px;
+    background:linear-gradient(90deg,#3b82f6,#2563eb);transition:width .35s ease}
   .stat{display:flex;gap:22px;flex-wrap:wrap;font-size:13px;color:var(--muted);margin-bottom:14px}
   .stat b{color:var(--text);font-size:15px}
   .tabs{display:flex;gap:6px;margin-bottom:14px}
@@ -103,8 +104,8 @@
       <span class="select-wrap">
         <select id="mode">
           <option value="code">纯本地识别</option>
-          <option value="flagged">本地 + 复核可疑页</option>
-          <option value="all">本地 + 全量复核</option>
+          <option value="flagged">本地 + LLM复核可疑页</option>
+          <option value="all">本地 + LLM全量复核</option>
         </select>
       </span>
       <span class="muted" id="mode-hint"></span>
@@ -244,14 +245,15 @@ function poll() {
     }
     if (s.stage === 'LLM 复核中') {
       const pct = s.llm_total ? Math.round(s.llm_done / s.llm_total * 100) : 0;
-      $('#progress-text').textContent = `LLM 复核中… ${s.llm_done}/${s.llm_total} 行`;
+      $('#progress-text').textContent = `LLM 复核 ${s.llm_done}/${s.llm_total} 行`;
+      $('#progress-sub').textContent = pct + '%';
       $('#bar-fill').style.width = pct + '%';
-      $('#progress-sub').textContent = '逐行核对';
     } else {
       const pct = s.total_pages ? Math.round(s.pages_done / s.total_pages * 100) : 0;
-      $('#progress-text').textContent = `正在识别… ${s.pages_done}/${s.total_pages} 页`;
+      $('#progress-text').textContent = s.total_pages
+        ? `正在识别 ${s.pages_done}/${s.total_pages} 页` : '准备中…';
+      $('#progress-sub').textContent = s.total_pages ? pct + '%' : '';
       $('#bar-fill').style.width = pct + '%';
-      $('#progress-sub').textContent = '';
     }
   }, 900);
 }
