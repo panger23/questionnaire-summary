@@ -66,7 +66,20 @@
   .hint{font-size:12px;color:var(--muted);margin-top:6px}
   .msg{margin-top:10px;font-size:13px}
   .msg.ok{color:var(--ok)} .msg.bad{color:var(--bad)}
-  select{font:inherit;padding:7px 10px;border:1px solid #d7dbe2;border-radius:8px;background:#fff}
+  .mode-row{margin-top:18px;align-items:center;gap:12px}
+  .mode-label{font-size:14px;color:var(--text)}
+  .select-wrap{position:relative;display:inline-flex;align-items:center}
+  .select-wrap::after{content:"";position:absolute;right:14px;width:7px;height:7px;
+    border-right:1.6px solid #8b93a1;border-bottom:1.6px solid #8b93a1;
+    transform:rotate(45deg) translateY(-2px);pointer-events:none;transition:border-color .15s}
+  .select-wrap:hover::after{border-color:#5b6472}
+  select{appearance:none;-webkit-appearance:none;font:inherit;font-size:14px;
+    padding:8px 36px 8px 13px;border:1px solid #d7dbe2;border-radius:9px;background:#fff;
+    color:var(--text);cursor:pointer;outline:none;min-width:196px;
+    transition:border-color .15s,box-shadow .15s}
+  select:hover{border-color:#b9c0ca}
+  select:focus{border-color:var(--primary);box-shadow:0 0 0 3px rgba(37,99,235,.12)}
+  select:disabled{background:#f5f6f8;color:var(--muted);cursor:not-allowed}
   .hidden{display:none !important}
 </style>
 </head>
@@ -85,13 +98,15 @@
       或者点击这里选择文件
     </div>
     <input type="file" id="file" accept="application/pdf" hidden>
-    <div class="row" style="margin-top:16px">
-      <label for="mode">识别方式</label>
-      <select id="mode">
-        <option value="code">纯本地识别</option>
-        <option value="flagged">本地 + LLM复核可疑页</option>
-        <option value="all">本地 + 全量复核</option>
-      </select>
+    <div class="row mode-row">
+      <label class="mode-label" for="mode">识别方式</label>
+      <span class="select-wrap">
+        <select id="mode">
+          <option value="code">纯本地识别</option>
+          <option value="flagged">本地 + 复核可疑页</option>
+          <option value="all">本地 + 全量复核</option>
+        </select>
+      </span>
       <span class="muted" id="mode-hint"></span>
     </div>
   </section>
@@ -231,7 +246,7 @@ function poll() {
       const pct = s.llm_total ? Math.round(s.llm_done / s.llm_total * 100) : 0;
       $('#progress-text').textContent = `LLM 复核中… ${s.llm_done}/${s.llm_total} 行`;
       $('#bar-fill').style.width = pct + '%';
-      $('#progress-sub').textContent = '约需 2 分钟';
+      $('#progress-sub').textContent = '逐行核对';
     } else {
       const pct = s.total_pages ? Math.round(s.pages_done / s.total_pages * 100) : 0;
       $('#progress-text').textContent = `正在识别… ${s.pages_done}/${s.total_pages} 页`;
