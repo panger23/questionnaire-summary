@@ -102,7 +102,7 @@ def index() -> HTMLResponse:
 
 # ---------------------------------------------------------------- 上传与任务
 @app.post("/api/upload")
-async def upload(file: UploadFile = File(...), use_llm: bool = Form(False)):
+async def upload(file: UploadFile = File(...), mode: str = Form("code")):
     data = await file.read()
     if not data:
         raise HTTPException(400, "文件是空的")
@@ -111,14 +111,20 @@ async def upload(file: UploadFile = File(...), use_llm: bool = Form(False)):
     if not data.startswith(b"%PDF"):
         raise HTTPException(400, "这不是 PDF 文件")
 
+    if mode not in ("code", "flagged", "all"):
+        raise HTTPException(400, "mode 参数不对，应为 code / flagged / all")
+
     client = None
-    if use_llm:
+    llm_scope = "all"
+    if mode != "code":
         cfg = load_config()
         if not cfg.get("api_key"):
-            raise HTTPException(400, "启用了 LLM 复核，但还没有填写 API Key，请先去「设置」里填")
+            raise HTTPException(400, "启用了 LLM，但还没有填写 API Key，请先去「设置」里填")
         client = VisionClient(cfg["api_base"], cfg["api_key"], cfg["model"])
+        llm_scope = "flagged" if mode == "flagged" else "all"
 
-    job = STORE.create(file.filename or "upload.pdf", data, bool(use_llm))
+    job = STORE.create(file.filename or "upload.pdf", data,
+                       use_llm=client is not None, llm_scope=llm_scope)
     start_job(job, client)
     return {"job_id": job.id}
 

@@ -20,6 +20,7 @@ class Job:
     filename: str
     pdf: bytes
     use_llm: bool
+    llm_scope: str = "all"
     status: str = "queued"  # queued / running / done / error
     stage: str = "排队中"
     pages_done: int = 0
@@ -37,8 +38,10 @@ class JobStore:
         self._jobs: dict[str, Job] = {}
         self._lock = threading.Lock()
 
-    def create(self, filename: str, pdf: bytes, use_llm: bool) -> Job:
-        job = Job(id=uuid.uuid4().hex[:12], filename=filename, pdf=pdf, use_llm=use_llm)
+    def create(self, filename: str, pdf: bytes, use_llm: bool,
+               llm_scope: str = "all") -> Job:
+        job = Job(id=uuid.uuid4().hex[:12], filename=filename, pdf=pdf,
+                  use_llm=use_llm, llm_scope=llm_scope)
         with self._lock:
             self._jobs[job.id] = job
         return job
@@ -79,10 +82,12 @@ def _run(job: Job, client) -> None:
             progress=on_page,
             llm_client=client,
             llm_progress=on_llm if client is not None else None,
+            llm_scope=job.llm_scope,
         )
         if client is not None:
             job.meta = {
-                "mode": f"纯代码 + LLM 复核（{client.model}）",
+                "mode": ("纯代码 + LLM 复核（仅可疑页，%s）" if job.llm_scope == "flagged"
+                         else "纯代码 + LLM 复核（全量，%s）") % client.model,
                 "model": client.model,
                 "llm_calls": client.usage.calls,
                 "llm_failures": client.usage.failures,

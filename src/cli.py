@@ -43,6 +43,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--model", help="覆盖配置里的模型名，例如 qwen3-vl-plus")
     parser.add_argument("--api-base", help="覆盖配置里的 API 地址")
     parser.add_argument("--workers", type=int, default=6, help="LLM 并发数，默认 6")
+    parser.add_argument("--llm-scope", choices=("all", "flagged"), default="all",
+                        help="all=所有页都复核；flagged=只复核有问题的页（更快更省）")
     parser.add_argument("-q", "--quiet", action="store_true", help="不打印逐页进度")
     args = parser.parse_args(argv)
 
@@ -69,13 +71,15 @@ def main(argv: list[str] | None = None) -> int:
 
     print(f"正在处理：{pdf.name}")
     results = process_pdf(str(pdf), dpi=args.dpi, progress=progress,
-                          llm_client=client, workers=args.workers)
+                          llm_client=client, workers=args.workers,
+                          llm_scope=args.llm_scope)
     elapsed = time.time() - started
 
     meta: dict = {}
     if client is not None:
         meta = {
-            "mode": f"纯代码 + LLM 复核（{client.model}）",
+            "mode": ("纯代码 + LLM 复核（仅可疑页，%s）" if args.llm_scope == "flagged"
+                     else "纯代码 + LLM 复核（全量，%s）") % client.model,
             "model": client.model,
             "llm_calls": client.usage.calls,
             "llm_failures": client.usage.failures,

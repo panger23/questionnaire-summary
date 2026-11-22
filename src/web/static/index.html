@@ -66,6 +66,7 @@
   .hint{font-size:12px;color:var(--muted);margin-top:6px}
   .msg{margin-top:10px;font-size:13px}
   .msg.ok{color:var(--ok)} .msg.bad{color:var(--bad)}
+  select{font:inherit;padding:7px 10px;border:1px solid #d7dbe2;border-radius:8px;background:#fff}
   .hidden{display:none !important}
 </style>
 </head>
@@ -85,9 +86,13 @@
     </div>
     <input type="file" id="file" accept="application/pdf" hidden>
     <div class="row" style="margin-top:16px">
-      <label><input type="checkbox" id="use-llm"> 启用 LLM 复核（更准，约 2 分钟、约 ¥0.2）</label>
-      <span class="spacer"></span>
-      <span class="muted" id="upload-hint"></span>
+      <label for="mode">识别方式</label>
+      <select id="mode">
+        <option value="code">纯本地识别 · 离线最快，0 元</option>
+        <option value="flagged">本地 + 复核可疑页 · 推荐</option>
+        <option value="all">本地 + 全量复核 · 最稳</option>
+      </select>
+      <span class="muted" id="mode-hint"></span>
     </div>
   </section>
 
@@ -132,20 +137,25 @@ async function loadConfig() {
     badge.textContent = '纯代码模式（未配置 Key）';
     badge.className = 'badge';
   }
-  $('#use-llm').checked = false;  // 默认不启用 LLM，需要时手动勾选
-  $('#use-llm').disabled = !CONFIG.has_key;
+  const modeSel = $('#mode');
+  modeSel.value = 'code';  // 默认纯本地，不调用 LLM
+  modeSel.querySelectorAll('option[value="flagged"], option[value="all"]')
+    .forEach(o => { o.disabled = !CONFIG.has_key; });
+  $('#mode-hint').textContent = CONFIG.has_key
+    ? ''
+    : '未配置 API Key，只能用纯本地模式';
 }
 
 function openSettings() {
   $('#modal-title').textContent = '设置';
   $('#modal-body').innerHTML = `
-    <label class="field">API 地址（兼容 OpenAI 协议，可改）</label>
+    <label class="field">API 地址</label>
     <input class="text" id="cfg-base" value="${CONFIG.api_base}">
     <label class="field">模型名</label>
     <input class="text" id="cfg-model" value="${CONFIG.model}">
-    <label class="field">API Key ${CONFIG.has_key ? '（已保存：' + CONFIG.key_masked + '，留空表示不修改）' : ''}</label>
+    <label class="field">API Key</label>
     <input class="text" id="cfg-key" type="password" placeholder="sk-...">
-    <div class="hint">Key 只保存在本机配置文件里，不会上传到任何地方，也不会进版本库。</div>
+    <div class="hint">Key 只保存在本机配置文件里，不会上传到任何地方，也不会进版本库；留空保存表示不修改。</div>
     <div class="row" style="margin-top:16px">
       <button class="primary" id="cfg-save">保存</button>
       <button id="cfg-test">测试连接</button>
@@ -191,7 +201,7 @@ async function upload(file) {
 
   const fd = new FormData();
   fd.append('file', file);
-  fd.append('use_llm', $('#use-llm').checked ? 'true' : 'false');
+  fd.append('mode', $('#mode').value);
   const resp = await fetch('/api/upload', {method: 'POST', body: fd});
   if (!resp.ok) {
     const err = await resp.json().catch(() => ({detail: '上传失败'}));

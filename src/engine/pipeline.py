@@ -114,7 +114,8 @@ def _apply_llm(r: PageResult, scores: list[int | None], marks: list[int]) -> Non
 
 def process_pdf(pdf_path: str, dpi: int = 300, progress: Progress | None = None,
                 llm_client=None, workers: int = 6,
-                llm_progress: Callable[[int, int], None] | None = None) -> list[PageResult]:
+                llm_progress: Callable[[int, int], None] | None = None,
+                llm_scope: str = "all") -> list[PageResult]:
     """处理整个 PDF。llm_client 不为 None 时，额外跑一遍 LLM 通道做交叉校验。"""
     results: list[PageResult] = []
     jobs: list[tuple[int, int, np.ndarray]] = []
@@ -153,7 +154,8 @@ def process_pdf(pdf_path: str, dpi: int = 300, progress: Progress | None = None,
                        total=sum_scores(readings), grid_ok=True, flags=flags,
                        grid_h=list(grid.h), grid_v=list(grid.v))
         )
-        if llm_client is not None:
+        # llm_scope = "flagged" 时，只把这一批里有问题的页送去复核，省时省钱
+        if llm_client is not None and (llm_scope == "all" or flags or sum_scores(readings) is None):
             for row_idx, rgb in enumerate(crop_rows_for_llm(gray, grid)):
                 jobs.append((len(results) - 1, row_idx, rgb))
         if progress:
