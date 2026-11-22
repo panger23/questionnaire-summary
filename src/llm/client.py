@@ -10,12 +10,20 @@ from __future__ import annotations
 
 import base64
 import json
+import random
 import re
+import time
 from dataclasses import dataclass
 from io import BytesIO
 
 import numpy as np
-from openai import OpenAI
+from openai import (
+    APIConnectionError,
+    APITimeoutError,
+    InternalServerError,
+    OpenAI,
+    RateLimitError,
+)
 
 from .prep import annotate_row
 
@@ -66,8 +74,9 @@ def parse_verdict(text: str) -> RowVerdict | None:
         data = json.loads(match.group(0))
     except json.JSONDecodeError:
         return None
-    raw_score = data.get("score")
-    raw_marks = data.get("marks", 1)
+    # 有的模型会自作主张把字段名写成中文（智谱 glm-4.5v 实测如此），一并兼容
+    raw_score = data.get("score", data.get("分数"))
+    raw_marks = data.get("marks", data.get("标记数", 1))
     if raw_score is None:
         return RowVerdict(score=None, marks=0)
     if isinstance(raw_score, float) and raw_score.is_integer():
@@ -89,37 +98,59 @@ def _png_bytes(rgb: np.ndarray) -> bytes:
 class VisionClient:
     """OpenAI 兼容接口的视觉模型客户端（默认百炼 qwen3-vl-plus）。"""
 
+    MAX_ATTEMPTS = 3  # 429/超时最多重试 3 次（180s×5 会卡 15 分钟，实测过的坑）
+
     def __init__(self, api_base: str, api_key: str, model: str = "qwen3-vl-plus",
-                 timeout: float = 90.0):
+                 timeout: float = 60.0, max_attempts: int = MAX_ATTEMPTS):
         self.model = model
+        self.max_attempts = max_attempts
         self.usage = Usage()
         self.last_error = ""      # 最后一次调用的报错原文
         self.channel_error = ""   # 整批失败时置位，表示"LLM 通道整体不可用"
+        self.partial_warning = "" # 部分调用失败时的提示
+        # 重试由我们自己控制（要指数退避 + 区分可重试的错），所以关掉 SDK 的重试
         self._client = OpenAI(base_url=api_base, api_key=api_key,
-                              timeout=timeout, max_retries=2)
+                              timeout=timeout, max_retries=0)
 
     def read_row(self, rgb: np.ndarray) -> RowVerdict | None:
-        """读一行评分：返回 (分值, 标记数)，无法判断返回 None。"""
+        """读一行评分：返回 (分值, 标记数)，无法判断返回 None。
+
+        429 限流和超时会做指数退避重试 —— 免费档模型并发很低，不重试基本跑不完。
+        """
         b64 = base64.b64encode(_png_bytes(annotate_row(rgb))).decode("ascii")
         content = [
             {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{b64}"}},
             {"type": "text", "text": ROW_PROMPT},
         ]
-        try:
-            resp = self._client.chat.completions.create(
-                model=self.model,
-                messages=[{"role": "user", "content": content}],
-                temperature=0,
-            )
-        except Exception as exc:  # noqa: BLE001 - 网络/额度/模型问题都按"这一行失败"处理
-            self.usage.failures += 1
-            self.last_error = f"{type(exc).__name__}: {str(exc)[:300]}"
-            return None
-        text = resp.choices[0].message.content or ""
-        usage = getattr(resp, "usage", None)
-        self.usage.add(getattr(usage, "prompt_tokens", 0) or 0,
-                       getattr(usage, "completion_tokens", 0) or 0)
-        return parse_verdict(text)
+        last_exc: Exception | None = None
+        for attempt in range(1, self.max_attempts + 1):
+            try:
+                resp = self._client.chat.completions.create(
+                    model=self.model,
+                    messages=[{"role": "user", "content": content}],
+                    temperature=0,
+                )
+            except (RateLimitError, APITimeoutError, APIConnectionError,
+                    InternalServerError) as exc:
+                # 429 限流 / 超时 / 5xx：退避后重试
+                last_exc = exc
+                if attempt < self.max_attempts:
+                    delay = min(30.0, 1.5 * (2 ** (attempt - 1))) + random.uniform(0, 0.6)
+                    time.sleep(delay)
+                continue
+            except Exception as exc:  # noqa: BLE001 - 密钥错/模型不存在等，重试无意义
+                last_exc = exc
+                break
+
+            text = resp.choices[0].message.content or ""
+            usage = getattr(resp, "usage", None)
+            self.usage.add(getattr(usage, "prompt_tokens", 0) or 0,
+                           getattr(usage, "completion_tokens", 0) or 0)
+            return parse_verdict(text)
+
+        self.usage.failures += 1
+        self.last_error = f"{type(last_exc).__name__}: {str(last_exc)[:300]}"
+        return None
 
     def estimated_cost(self, input_price_per_m: float = 1.0,
                        output_price_per_m: float = 10.0) -> float:

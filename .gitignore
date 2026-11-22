@@ -15,6 +15,7 @@ output/
 
 # ===== 配置与密钥（绝不入库）=====
 配置.json
+配置*.json
 config.json
 .env
 *.key

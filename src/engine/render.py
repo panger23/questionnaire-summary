@@ -30,3 +30,12 @@ def render_pages(pdf_path: str, dpi: int = DPI) -> Iterator[tuple[int, np.ndarra
 def ink_mask(gray: np.ndarray, threshold: int = INK_THRESHOLD) -> np.ndarray:
     """二值化：墨迹=True。"""
     return gray < threshold
+
+
+def count_pages(pdf_path: str) -> int:
+    """PDF 总页数（进度条要用）。"""
+    doc = pymupdf.open(pdf_path)
+    try:
+        return doc.page_count
+    finally:
+        doc.close()

@@ -72,6 +72,11 @@ def _rows(results) -> list[dict]:
     return [_row(r) for r in results]
 
 
+def _add_flag(r, text: str) -> None:
+    if text not in r.flags:
+        r.flags.append(text)
+
+
 def _find(job, page: int):
     for r in job.results:
         if r.page == page:
@@ -88,6 +93,7 @@ def _snapshot(job) -> dict:
         "mode": job.meta.get("mode", ""),
         "cost": job.meta.get("cost"),
         "llm_error": job.meta.get("llm_error", ""),
+        "llm_warning": job.meta.get("llm_warning", ""),
         "agree": sum(1 for r in job.results if r.agree is True),
         "disagree": sum(1 for r in job.results if r.agree is False),
     }
@@ -181,8 +187,7 @@ def edit_score(job_id: str, body: EditIn):
         raise HTTPException(400, "分数必须在 1~10 之间")
     r.readings[body.row].score = body.score
     r.total = sum_scores(r.readings)
-    if "人工修改" not in " ".join(r.flags):
-        r.flags.append("已人工修改分数")
+    _add_flag(r, "已人工修改分数")
     return {"row": _row(r), **_snapshot(job)}
 
 
@@ -199,7 +204,7 @@ def adopt_llm(job_id: str, body: PageIn):
         if value is not None and i < len(r.readings):
             r.readings[i].score = value
     r.total = sum_scores(r.readings)
-    r.flags.append("已人工采用 LLM 通道的分数")
+    _add_flag(r, "已人工采用 LLM 通道的分数")
     return {"row": _row(r), **_snapshot(job)}
 
 

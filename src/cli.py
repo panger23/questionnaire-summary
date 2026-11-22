@@ -42,7 +42,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--llm", action="store_true", help="启用 LLM 复核通道（需要 API Key）")
     parser.add_argument("--model", help="覆盖配置里的模型名，例如 qwen3-vl-plus")
     parser.add_argument("--api-base", help="覆盖配置里的 API 地址")
-    parser.add_argument("--workers", type=int, default=6, help="LLM 并发数，默认 6")
+    parser.add_argument("--workers", type=int, default=4, help="LLM 并发数，默认 4")
     parser.add_argument("--llm-scope", choices=("all", "flagged"), default="all",
                         help="all=所有页都复核；flagged=只复核有问题的页（更快更省）")
     parser.add_argument("-q", "--quiet", action="store_true", help="不打印逐页进度")
@@ -100,6 +100,11 @@ def main(argv: list[str] | None = None) -> int:
     for name, items in group_by_branch(results):
         print(f"{name:<28}{len(items):>5}{items[0].header.assistant:>10}"
               f"{_fmt_avg(average(items)):>12}")
+
+    if client is not None and getattr(client, "partial_warning", ""):
+        print()
+        print(f"⚠️  {client.partial_warning}")
+        meta["llm_warning"] = client.partial_warning
 
     if client is not None and getattr(client, "channel_error", ""):
         print()

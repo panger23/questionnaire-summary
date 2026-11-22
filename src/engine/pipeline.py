@@ -26,7 +26,7 @@ from .marks import (
     sum_scores,
     top_two,
 )
-from .render import ink_mask, render_pages
+from .render import count_pages, ink_mask, render_pages
 
 Progress = Callable[[int, int], None]
 
@@ -113,13 +113,14 @@ def _apply_llm(r: PageResult, scores: list[int | None], marks: list[int]) -> Non
 
 
 def process_pdf(pdf_path: str, dpi: int = 300, progress: Progress | None = None,
-                llm_client=None, workers: int = 6,
+                llm_client=None, workers: int = 4,
                 llm_progress: Callable[[int, int], None] | None = None,
                 llm_scope: str = "all") -> list[PageResult]:
     """处理整个 PDF。llm_client 不为 None 时，额外跑一遍 LLM 通道做交叉校验。"""
     results: list[PageResult] = []
     jobs: list[tuple[int, int, np.ndarray]] = []
     header_cache: dict[tuple[str, str, str], Header] = {}
+    total_pages = count_pages(pdf_path)
 
     for page_no, gray in render_pages(pdf_path, dpi=dpi):
         mask = ink_mask(gray)
@@ -132,7 +133,7 @@ def process_pdf(pdf_path: str, dpi: int = 300, progress: Progress | None = None,
                            grid_h=list(grid.h), grid_v=list(grid.v))
             )
             if progress:
-                progress(page_no, page_no)
+                progress(page_no, total_pages)
             continue
 
         readings = read_indicator_rows(mask, grid)
@@ -159,7 +160,7 @@ def process_pdf(pdf_path: str, dpi: int = 300, progress: Progress | None = None,
             for row_idx, rgb in enumerate(crop_rows_for_llm(gray, grid)):
                 jobs.append((len(results) - 1, row_idx, rgb))
         if progress:
-            progress(page_no, page_no)
+            progress(page_no, total_pages)
 
     if llm_client is not None and jobs:
         collected: dict[tuple[int, int], object] = {}
@@ -186,14 +187,19 @@ def process_pdf(pdf_path: str, dpi: int = 300, progress: Progress | None = None,
         for pi, slot in by_page.items():
             _apply_llm(results[pi], slot["scores"], slot["marks"])
 
-        # 整批大面积失败（额度/密钥/网络）时，不要给每一页都挂一条"LLM 没结果"，
-        # 那样 54 行全变黄反而看不清；改为一条整批提示。
+        # 只有"一次都没成功"才判定整批不可用；偶发超时只作为提示，
+        # 逐页的失败仍保留在标黄信息里。
         total_calls = len(jobs)
-        if llm_client.usage.failures >= max(1, int(total_calls * 0.5)):
+        failures = llm_client.usage.failures
+        if failures >= total_calls:
             llm_client.channel_error = (llm_client.last_error
                                         or "LLM 通道不可用（额度/密钥/网络问题）")
             for r in results:
                 r.flags = [f for f in r.flags if f != "LLM 没有给出任何分数"]
+        elif failures:
+            llm_client.partial_warning = (
+                f"{failures}/{total_calls} 次 LLM 调用失败（多为超时/限流），"
+                f"这些行按代码通道结果处理并标黄")
 
     return results
 

@@ -97,6 +97,8 @@ def _run(job: Job, client) -> None:
             }
         else:
             job.meta = {"mode": "纯代码模式（离线，未启用 LLM 复核）"}
+        if client is not None and getattr(client, "partial_warning", ""):
+            job.meta["llm_warning"] = client.partial_warning
         if client is not None and getattr(client, "channel_error", ""):
             job.meta["llm_error"] = client.channel_error
             job.meta["mode"] = "纯代码模式（LLM 复核失败，已自动退回）"
