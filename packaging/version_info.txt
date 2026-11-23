@@ -18,12 +18,12 @@ VSVersionInfo(
                     "080404B0",
                     [
                         StringStruct("CompanyName", "审计部山东分部 IT 团队"),
-                        StringStruct("FileDescription", "鲁审 · 汇卷（扫描件智能汇总）"),
+                        StringStruct("FileDescription", "鲁小审 · 汇卷（扫描件智能汇总）"),
                         StringStruct("FileVersion", "1.1.0.0"),
                         StringStruct("InternalName", "LuShen"),
                         StringStruct("LegalCopyright", "© 2026 审计部山东分部 IT 团队"),
                         StringStruct("OriginalFilename", "LuShen.exe"),
-                        StringStruct("ProductName", "鲁审 · 汇卷"),
+                        StringStruct("ProductName", "鲁小审 · 汇卷"),
                         StringStruct("ProductVersion", "1.1.0"),
                     ],
                 )

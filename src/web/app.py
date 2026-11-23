@@ -43,7 +43,7 @@ def _static_dir() -> Path:
 
 STATIC_DIR = _static_dir()
 
-app = FastAPI(title="鲁审 · 汇卷")
+app = FastAPI(title="鲁小审 · 汇卷")
 
 MAX_UPLOAD_BYTES = 200 * 1024 * 1024  # 200MB
 

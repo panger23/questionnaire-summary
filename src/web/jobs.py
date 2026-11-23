@@ -111,6 +111,9 @@ def _run(job: Job, client) -> None:
             job.meta["mode"] = "纯代码模式（LLM 复核失败，已自动退回）"
         job.stage = "完成"
         job.status = "done"
+    except NotQuestionnaireError as exc:
+        job.error = str(exc)  # 板式不对：这句话本身就是要给用户看的
+        job.status = "error"
     except Exception as exc:  # noqa: BLE001 - 任何异常都要反馈到界面上
         job.error = f"{type(exc).__name__}: {exc}"
         job.status = "error"
