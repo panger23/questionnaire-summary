@@ -23,14 +23,10 @@ from .marks import (
     indicator_name,
     read_indicator_rows,
     sum_scores,
-    top_two,
 )
 from .render import count_pages, deskew, estimate_skew, ink_mask, render_pages
 
 Progress = Callable[[int, int], None]
-
-# 两格墨量比达到这个值，才认为"两个格子里真有东西"（而不是勾尾巴扫过）
-AUTO_ADOPT_RATIO = 0.5
 
 # 整页墨迹占比低于此值 = 扫描仪夹进来的空白页。
 # 实测：正常问卷约 4.2%~4.5%，空白页只有 0.03%~0.04%，差 100 倍。
@@ -95,46 +91,37 @@ def crop_rows_for_llm(gray: np.ndarray, grid: Grid,
 
 
 def _apply_llm(r: PageResult, scores: list[int | None], marks: list[int]) -> None:
+    """本地 + LLM 复核模式。
+
+    两边一致 → 通过；不一致 → **以 LLM 的结果为准**，但一定标黄让人确认
+    （实测模型在"勾尾越界""画叉又打勾""跨行圈注"这些场景比墨迹法更准）。
+    """
     r.llm_scores = scores
     r.llm_marks = marks
     if all(s is None for s in scores):
-        r.flags.append(Flag("LLM 复核失败，这页按本地识别结果处理"))
+        r.flags.append(Flag("LLM 没能识别这一页，按本地结果处理"))
         return
 
-    diffs = 0
-    for i, (a, b) in enumerate(zip(r.scores, scores)):
-        if a == b:
-            continue
+    diffs: list[str] = []
+    for i, value in enumerate(scores):
         name = indicator_name(i)
-        if a is None or b is None:
-            r.flags.append(Flag(f"{name}：两个通道结论不一致，请确认",
-                                f"本地 {a if a is not None else '未识别'} / "
-                                f"LLM {b if b is not None else '未识别'}"))
-            diffs += 1
+        local = r.scores[i]
+        if value is None:
+            r.flags.append(Flag(f"{name}：LLM 没读出来，按本地结果 {local} 分，请确认"))
             continue
-        ratios = r.readings[i].ratios
-        best, second, _best_i, second_i = top_two(ratios)
-        ratio = second / best if best > 0 else 0.0
-        second_score = 10 - second_i
-        if ratio >= AUTO_ADOPT_RATIO and marks[i] >= 2 and b == second_score:
-            r.readings[i].score = b
-            r.adopted.append(f"{name} {a}→{b}")
-            r.flags.append(Flag(
-                f"{name}：两个格子都有标记，已按「打勾优先、画叉作废」取 {b} 分",
-                f"本地判 {a}、LLM 判 {b}；两格墨量 {best:.2%} / {second:.2%}"))
-            continue
-        diffs += 1
-        r.flags.append(Flag(
-            f"{name}：本地 {a} 分、LLM {b} 分，暂按本地结果",
-            f"两格墨量 {best:.2%} / {second:.2%}，更像勾的尾巴扫过，未自动采用 LLM 判断"
-        ))
-
+        if local is not None and local != value:
+            diffs.append(f"{name}：本地 {local} 分、LLM {value} 分，暂按 LLM 结果")
+            r.readings[i].score = value
     r.total = sum_scores(r.readings)
     if all(s is not None for s in scores):
         r.llm_total = int(sum(s for s in scores if s is not None))
 
-    # 采用过 LLM 判断的页，本质仍是"两通道不一致"，只是已经按规则裁决过了
-    r.agree = not (diffs or r.adopted)
+    if diffs:
+        r.agree = False
+        for text in diffs:
+            r.flags.append(Flag(text, "点「看原图」核对后改分即可"))
+    else:
+        r.agree = True
 
 
 def process_pdf(pdf_path: str, dpi: int = 300, progress: Progress | None = None,
