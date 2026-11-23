@@ -74,7 +74,10 @@ jobs:
           $sevenZip = "C:\Program Files\7-Zip\7z.exe"
           if (-not (Test-Path $sevenZip)) { $sevenZip = "C:\Program Files (x86)\7-Zip\7z.exe" }
           if (-not (Test-Path $sevenZip)) { throw "找不到 7z.exe" }
-          & $sevenZip a -v90m -mx=5 "dist\分卷\LuShen-windows.7z" "dist\发布\LuShen" | Select-Object -Last 3
+          # 切到 dist\发布 里再压缩，这样解压出来就是 LuShen/ 这一层，不会嵌 dist\发布
+          Push-Location "dist\发布"
+          & $sevenZip a -v90m -mx=5 "..\分卷\LuShen-windows.7z" "LuShen" | Select-Object -Last 3
+          Pop-Location
           Get-ChildItem "dist\分卷" | ForEach-Object {
             Write-Host ("  {0}  {1:N1} MB" -f $_.Name, ($_.Length / 1MB))
           }
