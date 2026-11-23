@@ -84,8 +84,9 @@ def crop_rows_for_llm(gray: np.ndarray, grid: Grid,
     """
     columns = layout or default_layout(grid)
     rows: list[np.ndarray] = []
-    x0 = grid.col_band(columns[0][0])[0] - 6
-    x1 = grid.col_band(columns[-1][0])[1] + 6
+    # 注意用 score_col_band：columns 里存的是"分值列序号"，不是原始竖线下标
+    x0 = grid.score_col_band(columns[0][0])[0] - 6
+    x1 = grid.score_col_band(columns[-1][0])[1] + 6
     for r in grid.data_rows:
         y0, y1 = grid.h[r] - 4, grid.h[r + 1] + 4
         sub = gray[y0:y1, x0:x1]
