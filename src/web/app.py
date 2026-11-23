@@ -20,7 +20,7 @@ from PIL import Image
 from pydantic import BaseModel
 
 from .. import __version__
-from ..engine.pipeline import average, group_by_branch, sum_scores
+from ..engine.pipeline import Flag, average, group_by_branch, sum_scores
 from ..export.xlsx import build_workbook
 from ..llm.client import VisionClient
 from ..llm.config import (
@@ -84,9 +84,15 @@ def _rows(results) -> list[dict]:
     return [_row(r) for r in results]
 
 
-def _add_flag(r, text: str) -> None:
-    if text not in r.flags:
-        r.flags.append(text)
+def _add_flag(r, text: str, detail: str = "") -> None:
+    """往标记列表里加一条「人工操作」记录。
+
+    列表里必须是 Flag 对象（有 short/detail 两个字段），不能塞纯字符串，
+    否则序列化时会 AttributeError。
+    """
+    if any(f.short == text for f in r.flags):
+        return
+    r.flags.append(Flag(text, detail))
 
 
 def _find(job, page: int):
@@ -207,7 +213,7 @@ def edit_score(job_id: str, body: EditIn):
         raise HTTPException(400, "分数必须在 1~10 之间")
     r.readings[body.row].score = body.score
     r.total = sum_scores(r.readings)
-    _add_flag(r, "已人工修改分数")
+    _add_flag(r, "这一行手动改过分数", "人工核对后修正确认")
     return {"row": _row(r), **_snapshot(job)}
 
 
@@ -224,7 +230,7 @@ def adopt_llm(job_id: str, body: PageIn):
         if value is not None and i < len(r.readings):
             r.readings[i].score = value
     r.total = sum_scores(r.readings)
-    _add_flag(r, "已人工采用 LLM 通道的分数")
+    _add_flag(r, "这一行采用了 LLM 的判定", "人工确认后采用 LLM 通道的 5 个分数")
     return {"row": _row(r), **_snapshot(job)}
 
 

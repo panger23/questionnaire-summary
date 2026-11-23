@@ -113,6 +113,49 @@ class LlmParseTests(unittest.TestCase):
         self.assertEqual(masked_key(""), "")
 
 
+class WebSerializationTests(unittest.TestCase):
+    """手工改分 / 采用 LLM 之后，标记列表里必须都是 Flag 对象，序列化不能崩。
+
+    之前这里踩过坑：往 r.flags 里塞纯字符串，编辑分数后整个接口 500。
+    """
+
+    @staticmethod
+    def _make_row():
+        from src.engine.header import Header
+        from src.engine.marks import RowReading
+        from src.engine.pipeline import Flag, PageResult
+
+        readings = [
+            RowReading(row=row, score=10, ratios=[0.04] + [0.0] * 9)
+            for row in (4, 5, 6, 7, 8)
+        ]
+        return PageResult(
+            page=3,
+            header=Header("2025年日照分行常规审计", "陈霄", "綦光磊"),
+            readings=readings,
+            total=50,
+            grid_ok=True,
+            flags=[Flag("短句说明", "技术细节")],
+        )
+
+    def test_row_serializes(self):
+        from src.web.app import _row
+
+        data = _row(self._make_row())
+        self.assertEqual(data["flags"][0]["short"], "短句说明")
+        self.assertEqual(data["flags"][0]["detail"], "技术细节")
+
+    def test_add_flag_keeps_flag_objects(self):
+        from src.web.app import _add_flag, _row
+
+        r = self._make_row()
+        _add_flag(r, "这一行手动改过分数")
+        data = _row(r)  # 以前这步会 AttributeError
+        self.assertEqual(data["flags"][-1]["short"], "这一行手动改过分数")
+        _add_flag(r, "这一行手动改过分数")  # 重复添加不叠加
+        self.assertEqual(len(r.flags), 2)
+
+
 class LayoutConstantTests(unittest.TestCase):
     def test_geometry_expectations(self):
         self.assertEqual(len(H), 11)

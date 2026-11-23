@@ -36,6 +36,6 @@ jobs:
         with:
           python-version: "3.11"
       - name: 安装测试所需依赖
-        run: python -m pip install -q numpy Pillow openai
+        run: python -m pip install -q numpy Pillow openai fastapi pymupdf python-multipart
       - name: 跑测试
         run: python -m unittest discover -s tests -v
