@@ -341,7 +341,7 @@ function poll() {
     }
     if (s.stage === 'LLM 复核中') {
       const pct = s.llm_total ? Math.round(s.llm_done / s.llm_total * 100) : 0;
-      $('#progress-text').textContent = `LLM 复核 ${s.llm_done}/${s.llm_total} 行`;
+      $('#progress-text').textContent = `LLM 复核 ${s.llm_done}/${s.llm_total} 页`;
       $('#progress-sub').textContent = pct + '%';
       $('#bar-fill').style.width = pct + '%';
     } else {

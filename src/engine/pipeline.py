@@ -262,11 +262,21 @@ def process_pdf(pdf_path: str, dpi: int = 300, progress: Progress | None = None,
             progress(page_no, total_pages)
 
     if llm_client is not None and jobs:
+        # 进度按"页"报给界面（一次复核一页里的 5 行，5 行全答完 = 这页答完）
+        rows_per_page: dict[int, int] = {}
+        for pi, _ri, _rgb in jobs:
+            rows_per_page[pi] = rows_per_page.get(pi, 0) + 1
+        total_review_pages = len(rows_per_page)
+        if llm_progress is not None:
+            llm_progress(0, total_review_pages)  # 立刻切到"LLM 复核中"，别让界面停在上一步
+
         collected: dict[tuple[int, int], object] = {}
         with ThreadPoolExecutor(max_workers=max(1, workers)) as pool:
             futures = {pool.submit(llm_client.read_row, rgb): (pi, ri)
                        for pi, ri, rgb in jobs}
             done = 0
+            finished_per_page: dict[int, int] = {}
+            pages_done = 0
             for fut in as_completed(futures):
                 key = futures[fut]
                 try:
@@ -274,8 +284,12 @@ def process_pdf(pdf_path: str, dpi: int = 300, progress: Progress | None = None,
                 except Exception:  # noqa: BLE001
                     collected[key] = None
                 done += 1
-                if llm_progress is not None and (done % 10 == 0 or done == len(futures)):
-                    llm_progress(done, len(futures))
+                page_index = key[0]
+                finished_per_page[page_index] = finished_per_page.get(page_index, 0) + 1
+                if finished_per_page[page_index] == rows_per_page[page_index]:
+                    pages_done += 1
+                    if llm_progress is not None:
+                        llm_progress(pages_done, total_review_pages)
         by_page: dict[int, dict] = {}
         for (pi, ri), verdict in collected.items():
             n_rows = len(results[pi].readings) or 1
