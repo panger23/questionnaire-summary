@@ -236,8 +236,9 @@ def process_pdf(pdf_path: str, dpi: int = 300, progress: Progress | None = None,
                     llm_progress(done, len(futures))
         by_page: dict[int, dict] = {}
         for (pi, ri), verdict in collected.items():
-            slot = by_page.setdefault(pi, {"scores": [None] * len(INDICATOR_ROWS),
-                                           "marks": [0] * len(INDICATOR_ROWS)})
+            n_rows = len(results[pi].readings) or 1
+            slot = by_page.setdefault(pi, {"scores": [None] * n_rows,
+                                           "marks": [0] * n_rows})
             if verdict is not None:
                 slot["scores"][ri] = getattr(verdict, "score", None)
                 slot["marks"][ri] = getattr(verdict, "marks", 0)
