@@ -63,6 +63,11 @@ a = Analysis(
 )
 pyz = PYZ(a.pure)
 
+# Windows 上给 exe 写入"公司/产品/版权"等属性（右键属性可见）
+exe_kwargs = {}
+if sys.platform == "win32":
+    exe_kwargs["version"] = str(ROOT / "packaging/version_info.txt")
+
 exe = EXE(
     pyz,
     a.scripts,
@@ -73,6 +78,7 @@ exe = EXE(
     strip=False,
     upx=False,
     console=True,  # 控制台里显示访问地址；关掉窗口即停止服务
+    **exe_kwargs,
 )
 
 coll = COLLECT(
