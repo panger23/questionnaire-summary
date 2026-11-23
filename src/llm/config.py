@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import json
 import os
+import sys
 from pathlib import Path
 
 DEFAULT_API_BASE = "https://dashscope.aliyuncs.com/compatible-mode/v1"
@@ -16,10 +17,17 @@ CONFIG_NAME = "配置.json"
 
 
 def config_path() -> Path:
-    """配置文件位置：环境变量 QSUM_CONFIG 优先，否则项目根目录的 配置.json。"""
+    """配置文件位置。
+
+    - 环境变量 QSUM_CONFIG 优先
+    - 打包成 exe 后：配置文件放在 exe 同目录（用户看得见、可备份）
+    - 源码运行：项目根目录的 配置.json
+    """
     env = os.environ.get("QSUM_CONFIG")
     if env:
         return Path(env).expanduser()
+    if getattr(sys, "frozen", False):
+        return Path(sys.executable).resolve().parent / CONFIG_NAME
     return Path(__file__).resolve().parents[2] / CONFIG_NAME
 
 

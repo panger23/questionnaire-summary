@@ -107,3 +107,18 @@ python3 -m venv .venv
 仓库是公开的，**任何问卷扫描件、图片、汇总表、API Key 都不允许进入版本库**。
 `.gitignore` 第一段就把 `data/`、`*.pdf`、`*.xlsx`、配置文件全部挡掉；
 CI 里另有硬检查：仓库中一旦出现 PDF/图片/表格文件，构建直接失败。
+
+## 打包成免安装程序
+
+源码需要 Python 环境；给不装 Python 的同事用，可以打包成免安装目录。
+
+```bash
+pip install pyinstaller
+pyinstaller --clean --noconfirm packaging/app.spec
+# 产物：dist/HuiJuan/  （双击 HuiJuan.exe 即启动网页）
+```
+
+- 打包配置在 `packaging/app.spec`（onedir 模式：启动快、杀软误报少）
+- 用户说明在 `packaging/使用说明.txt`
+- Windows 版由 GitHub Actions 在云端构建：见 `.github/workflows/build-windows.yml`
+  （推送 `v*` 标签或手动触发，产物在 Actions 页面的 Artifacts 里下载）

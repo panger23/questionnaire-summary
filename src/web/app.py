@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import io
+import sys
 import tempfile
 import time
 from pathlib import Path
@@ -29,7 +30,16 @@ from ..llm.config import (
 )
 from .jobs import STORE, start_job
 
-STATIC_DIR = Path(__file__).parent / "static"
+def _static_dir() -> Path:
+    """源码运行时在 src/web/static；PyInstaller 打包后在 _MEIPASS/src/web/static。"""
+    here = Path(__file__).parent / "static"
+    if (here / "index.html").exists():
+        return here
+    base = Path(getattr(sys, "_MEIPASS", Path(__file__).parent))
+    return base / "src" / "web" / "static"
+
+
+STATIC_DIR = _static_dir()
 
 app = FastAPI(title="汇卷 · 扫描件智能汇总")
 
@@ -103,7 +113,10 @@ def _snapshot(job) -> dict:
 # ---------------------------------------------------------------- 页面
 @app.get("/", response_class=HTMLResponse)
 def index() -> HTMLResponse:
-    return HTMLResponse((STATIC_DIR / "index.html").read_text("utf-8"))
+    page = STATIC_DIR / "index.html"
+    if not page.exists():
+        raise HTTPException(500, f"页面文件缺失：{page}")
+    return HTMLResponse(page.read_text("utf-8"))
 
 
 # ---------------------------------------------------------------- 上传与任务
