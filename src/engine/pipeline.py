@@ -124,10 +124,61 @@ def _apply_llm(r: PageResult, scores: list[int | None], marks: list[int]) -> Non
         r.agree = True
 
 
+class NotQuestionnaireError(RuntimeError):
+    """上传的文件不是这个问卷板式（或压根不是问卷），应当立刻中止并提示用户。"""
+
+
+def check_questionnaire(pdf_path: str, dpi: int = 200, max_pages: int = 3) -> None:
+    """上传后先"验明正身"：前几页必须能找到评分表格、且表头能读出内容。
+
+    不是这个板式就直接抛 NotQuestionnaireError，避免把整份不相干的文件
+    当成问卷处理一遍、最后给出一堆"未识别分行"的垃圾结果。
+    """
+    examined = 0
+    table_pages = 0
+    header_ok = 0
+
+    for _page_no, gray in render_pages(pdf_path, dpi=dpi):
+        mask = ink_mask(gray)
+        if mask.mean() < BLANK_PAGE_MAX_INK:
+            continue
+        examined += 1
+
+        grid = find_grid(mask)
+        if not grid.ok:
+            angle = estimate_skew(gray)
+            if abs(angle) >= 0.1:
+                gray = deskew(gray, angle)
+                mask = ink_mask(gray)
+                grid = find_grid(mask)
+
+        if grid.ok and grid.score_column_count >= 3:
+            table_pages += 1
+            if header_ok < 2:
+                header = parse_header(header_crop(gray, grid))
+                if header.project or header.assistant:
+                    header_ok += 1
+
+        if examined >= max_pages:
+            break
+
+    if examined == 0:
+        raise NotQuestionnaireError(
+            "整份文件看起来全是空白页（或扫描全黑），没有识别到任何内容。")
+    if table_pages == 0:
+        raise NotQuestionnaireError(
+            f"检查了前 {examined} 页，都没有找到「评分表格」。"
+            "这份文件看起来不是《审计项目组组员满意度调查问卷》，已停止处理以免给出错误结果。")
+    if header_ok == 0:
+        raise NotQuestionnaireError(
+            "找到了表格，但表头里的「项目名称 / 审计组长 / 组长助手」一个都没认出来，"
+            "可能不是这个问卷板式；也可能是扫描太糊。已停止处理。")
+
+
 def process_pdf(pdf_path: str, dpi: int = 300, progress: Progress | None = None,
                 llm_client=None, workers: int = 4,
                 llm_progress: Callable[[int, int], None] | None = None,
-                llm_scope: str = "all") -> ProcessOutcome:
+                llm_scope: str = "all", skip_check: bool = False) -> ProcessOutcome:
     """处理整个 PDF。llm_client 不为 None 时，额外跑一遍 LLM 通道做交叉校验。
 
     空白页（扫描仪夹进来的白纸）会被跳过，不计入问卷份数和平均分，
@@ -137,6 +188,9 @@ def process_pdf(pdf_path: str, dpi: int = 300, progress: Progress | None = None,
     blank_pages: list[int] = []
     jobs: list[tuple[int, int, np.ndarray]] = []
     header_cache: dict[tuple[str, str, str], Header] = {}
+    if not skip_check:
+        check_questionnaire(pdf_path)
+
     total_pages = count_pages(pdf_path)
     score_layout: list[tuple[int, int]] | None = None  # 一份文档只读一次表头分值
 
@@ -246,6 +300,11 @@ def process_pdf(pdf_path: str, dpi: int = 300, progress: Progress | None = None,
             llm_client.partial_warning = (
                 f"{failures}/{total_calls} 次 LLM 调用失败（多为超时/限流），"
                 f"这些行按代码通道结果处理并标黄")
+
+    if not results:
+        raise NotQuestionnaireError(
+            f"{total_pages} 页里一张问卷都没识别出来，已停止处理。"
+            "请确认文件是否是《审计项目组组员满意度调查问卷》的扫描件。")
 
     return ProcessOutcome(results=results, blank_pages=blank_pages,
                           total_pages=total_pages)

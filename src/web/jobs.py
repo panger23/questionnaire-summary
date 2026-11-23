@@ -11,7 +11,7 @@ import time
 import uuid
 from dataclasses import dataclass, field
 
-from ..engine.pipeline import PageResult, process_pdf
+from ..engine.pipeline import NotQuestionnaireError, PageResult, process_pdf
 
 
 @dataclass

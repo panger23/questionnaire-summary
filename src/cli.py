@@ -6,7 +6,12 @@ import sys
 import time
 from pathlib import Path
 
-from .engine.pipeline import average, group_by_branch, process_pdf
+from .engine.pipeline import (
+    NotQuestionnaireError,
+    average,
+    group_by_branch,
+    process_pdf,
+)
 from .export.xlsx import build_workbook
 from .llm.client import VisionClient
 from .llm.config import config_path, load_config, masked_key
@@ -70,9 +75,13 @@ def main(argv: list[str] | None = None) -> int:
             print(f"  已处理 {page} 页…", flush=True)
 
     print(f"正在处理：{pdf.name}")
-    outcome = process_pdf(str(pdf), dpi=args.dpi, progress=progress,
-                          llm_client=client, workers=args.workers,
-                          llm_scope=args.llm_scope)
+    try:
+        outcome = process_pdf(str(pdf), dpi=args.dpi, progress=progress,
+                              llm_client=client, workers=args.workers,
+                              llm_scope=args.llm_scope)
+    except NotQuestionnaireError as exc:
+        print(f"\n无法处理：{exc}")
+        return 2
     results = outcome.results
     elapsed = time.time() - started
 

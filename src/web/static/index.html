@@ -304,6 +304,8 @@ async function upload(file) {
     return;
   }
   JOB = (await resp.json()).job_id;
+  const oldErr = $('#lay-error');
+  if (oldErr) oldErr.remove();
   poll();
 }
 
@@ -313,7 +315,22 @@ function poll() {
     const s = await (await fetch('/api/jobs/' + JOB)).json();
     if (s.status === 'error') {
       clearInterval(polling);
-      $('#progress-text').textContent = '识别失败：' + s.error;
+      $('#bar-fill').style.width = '100%';
+      $('#bar-fill').style.background = '#e5484d';
+      $('#progress-text').textContent = '这份文件没法处理';
+      $('#progress-sub').textContent = '';
+      let box = $('#lay-error');
+      if (!box) {
+        box = document.createElement('div');
+        box.id = 'lay-error';
+        box.className = 'banner danger';
+        box.style.marginTop = '14px';
+        box.style.lineHeight = '1.7';
+        $('#progress-card').appendChild(box);
+      }
+      box.innerHTML = '⚠️ ' + esc(s.error) +
+        '<br><span style="opacity:.85">请核对：是不是传错了文件？' +
+        '正常情况下应上传《审计项目组组员满意度调查问卷》的扫描件。</span>';
       return;
     }
     if (s.status === 'done') {
