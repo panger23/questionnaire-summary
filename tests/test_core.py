@@ -32,6 +32,10 @@ V = [202, 348, 1322, 1456, 1589, 1721, 1854, 1987, 2119, 2252,
      2385, 2518, 2651, 2784, 3278]
 
 
+# 测试用表格是 10 档（10分…1分），显式给出布局，不依赖表头 OCR
+LAYOUT = [(i, 10 - i) for i in range(10)]
+
+
 def make_mask() -> np.ndarray:
     return np.zeros((2458, 3520), dtype=bool)
 
@@ -57,7 +61,7 @@ class MarkTests(unittest.TestCase):
         for row in INDICATOR_ROWS:
             paint_cell(mask, row, 0)  # 全部勾在 10 分
         grid = Grid(h=H, v=V, ok=True)
-        readings = read_indicator_rows(mask, grid)
+        readings = read_indicator_rows(mask, grid, LAYOUT)
         self.assertEqual([r.score for r in readings], [10] * 5)
         self.assertEqual(sum_scores(readings), 50)
         self.assertFalse(any(r.note for r in readings))
@@ -67,7 +71,7 @@ class MarkTests(unittest.TestCase):
         for row in INDICATOR_ROWS:
             paint_cell(mask, row, 2)  # 8 分
         grid = Grid(h=H, v=V, ok=True)
-        self.assertEqual([r.score for r in read_indicator_rows(mask, grid)], [8] * 5)
+        self.assertEqual([r.score for r in read_indicator_rows(mask, grid, LAYOUT)], [8] * 5)
 
     def test_two_marks_is_flagged(self):
         mask = make_mask()
@@ -75,7 +79,7 @@ class MarkTests(unittest.TestCase):
             paint_cell(mask, row, 0)
         paint_cell(mask, INDICATOR_ROWS[0], 3, thickness=18)  # 再多画一个 7 分
         grid = Grid(h=H, v=V, ok=True)
-        readings = read_indicator_rows(mask, grid)
+        readings = read_indicator_rows(mask, grid, LAYOUT)
         self.assertTrue(readings[0].note, "两个格子都有墨时必须给出提示")
         best, second, _, _ = top_two(readings[0].ratios)
         self.assertGreater(second / best, AMBIGUOUS_SECOND_RATIO)
@@ -85,7 +89,7 @@ class MarkTests(unittest.TestCase):
         for row in INDICATOR_ROWS[1:]:
             paint_cell(mask, row, 0)
         grid = Grid(h=H, v=V, ok=True)
-        readings = read_indicator_rows(mask, grid)
+        readings = read_indicator_rows(mask, grid, LAYOUT)
         self.assertIsNone(readings[0].score)
         self.assertIsNone(sum_scores(readings))
 

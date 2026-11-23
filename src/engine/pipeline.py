@@ -8,6 +8,7 @@
 """
 from __future__ import annotations
 
+import difflib
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from typing import Callable
@@ -15,18 +16,16 @@ from typing import Callable
 import numpy as np
 
 from .grid import Grid, find_grid
-from .header import Header, header_crop, parse_header
+from .header import Header, header_crop, parse_header, read_score_layout
 from .marks import (
-    INDICATOR_NAMES,
-    INDICATOR_ROWS,
-    SCORE_COL_END,
-    SCORE_COL_START,
     RowReading,
+    default_layout,
+    indicator_name,
     read_indicator_rows,
     sum_scores,
     top_two,
 )
-from .render import count_pages, ink_mask, render_pages
+from .render import count_pages, deskew, estimate_skew, ink_mask, render_pages
 
 Progress = Callable[[int, int], None]
 
@@ -68,21 +67,26 @@ class PageResult:
     adopted: list[str] = field(default_factory=list)
     grid_h: list[int] = field(default_factory=list)
     grid_v: list[int] = field(default_factory=list)
+    skew: float = 0.0  # 这一页被纠正的角度，原图预览时要按同样角度转
+    crop_box: tuple[int, int, int, int] | None = None  # 表格区域，供"看原图"裁切
 
     @property
     def scores(self) -> list[int | None]:
         return [r.score for r in self.readings]
 
 
-def crop_rows_for_llm(gray: np.ndarray, grid: Grid) -> list[np.ndarray]:
+def crop_rows_for_llm(gray: np.ndarray, grid: Grid,
+                      layout: list[tuple[int, int]] | None = None) -> list[np.ndarray]:
     """按行裁出给模型看的图：每行只含 10 个分值格，一行一张图。
 
     实测整块发会翻车（模型在窄列网格上会输出 10/9/8/7/6 这种伪规律），
     一行一张图 + 格子上方印分值标签之后，成功率接近 100%。
     """
+    columns = layout or default_layout(grid)
     rows: list[np.ndarray] = []
-    x0, x1 = grid.v[SCORE_COL_START] - 6, grid.v[SCORE_COL_END] + 6
-    for r in INDICATOR_ROWS:
+    x0 = grid.col_band(columns[0][0])[0] - 6
+    x1 = grid.col_band(columns[-1][0])[1] + 6
+    for r in grid.data_rows:
         y0, y1 = grid.h[r] - 4, grid.h[r + 1] + 4
         sub = gray[y0:y1, x0:x1]
         rows.append(np.repeat(sub[:, :, None], 3, axis=2))
@@ -100,7 +104,7 @@ def _apply_llm(r: PageResult, scores: list[int | None], marks: list[int]) -> Non
     for i, (a, b) in enumerate(zip(r.scores, scores)):
         if a == b:
             continue
-        name = INDICATOR_NAMES[i]
+        name = indicator_name(i)
         if a is None or b is None:
             r.flags.append(Flag(f"{name}：两个通道结论不一致，请确认",
                                 f"本地 {a if a is not None else '未识别'} / "
@@ -146,6 +150,7 @@ def process_pdf(pdf_path: str, dpi: int = 300, progress: Progress | None = None,
     jobs: list[tuple[int, int, np.ndarray]] = []
     header_cache: dict[tuple[str, str, str], Header] = {}
     total_pages = count_pages(pdf_path)
+    score_layout: list[tuple[int, int]] | None = None  # 一份文档只读一次表头分值
 
     for page_no, gray in render_pages(pdf_path, dpi=dpi):
         mask = ink_mask(gray)
@@ -157,22 +162,35 @@ def process_pdf(pdf_path: str, dpi: int = 300, progress: Progress | None = None,
                 progress(page_no, total_pages)
             continue
 
+        # 先按原图找网格；找不到再判断是不是扫描倾斜，纠偏后重试
         grid = find_grid(mask)
+        angle = 0.0
+        if not grid.ok:
+            angle = estimate_skew(gray)
+            if abs(angle) >= 0.1:
+                gray = deskew(gray, angle)
+                mask = ink_mask(gray)
+                grid = find_grid(mask)
+            else:
+                angle = 0.0
 
         if not grid.ok:
             results.append(
                 PageResult(page=page_no, header=Header("", "", ""), readings=[],
                            total=None, grid_ok=False,
                            flags=[Flag("这一页的表格没找到，请人工核对", grid.note)],
+                           skew=angle,
                            grid_h=list(grid.h), grid_v=list(grid.v))
             )
             if progress:
                 progress(page_no, total_pages)
             continue
 
-        readings = read_indicator_rows(mask, grid)
+        if score_layout is None:
+            score_layout = read_score_layout(gray, grid) or default_layout(grid)
+        readings = read_indicator_rows(mask, grid, score_layout)
         flags = [
-            Flag(f"{INDICATOR_NAMES[r.row - 4]}：{r.note}", r.detail)
+            Flag(f"{indicator_name(r.index)}：{r.note}", r.detail)
             for r in readings if r.note
         ]
 
@@ -190,11 +208,13 @@ def process_pdf(pdf_path: str, dpi: int = 300, progress: Progress | None = None,
         results.append(
             PageResult(page=page_no, header=header, readings=readings,
                        total=sum_scores(readings), grid_ok=True, flags=flags,
-                       grid_h=list(grid.h), grid_v=list(grid.v))
+                       grid_h=list(grid.h), grid_v=list(grid.v), skew=angle,
+                       crop_box=(grid.v[0], grid.h[max(0, grid.header_row - 1)],
+                                 grid.v[-1], grid.h[-1]))
         )
         # llm_scope = "flagged" 时，只把这一批里有问题的页送去复核，省时省钱
         if llm_client is not None and (llm_scope == "all" or flags or sum_scores(readings) is None):
-            for row_idx, rgb in enumerate(crop_rows_for_llm(gray, grid)):
+            for row_idx, rgb in enumerate(crop_rows_for_llm(gray, grid, score_layout)):
                 jobs.append((len(results) - 1, row_idx, rgb))
         if progress:
             progress(page_no, total_pages)
@@ -242,17 +262,56 @@ def process_pdf(pdf_path: str, dpi: int = 300, progress: Progress | None = None,
                           total_pages=total_pages)
 
 
+# 引号类字符在扫描件里经常被 OCR 成半角/全角/直角引号等不同形态，
+# 但它们不该把同一个项目拆成两组 → 分组时忽略这些字符，显示仍用首次出现的写法。
+_QUOTE_CHARS = '"\'""\'\'「」『』《》〈〉'
+
+
+def _branch_key(name: str) -> str:
+    return "".join(ch for ch in name if ch not in _QUOTE_CHARS)
+
+
+def _same_project(a: str, b: str) -> bool:
+    """判断两个项目名是不是同一个（容忍 OCR 漏字/多字）。
+
+    OCR 偶尔会把「菏泽」读成「泽」，一个项目就被拆成两组。
+    这里只在"长度差 ≤2 且相似度 ≥93%"时才认为是同一个——
+    像「日照分行」和「济宁分行」这种正规差异相似度只有 80% 出头，不会被误合并。
+    """
+    if a == b:
+        return True
+    if min(len(a), len(b)) < 10 or abs(len(a) - len(b)) > 2:
+        return False
+    return difflib.SequenceMatcher(None, a, b).ratio() >= 0.93
+
+
 def group_by_branch(results: list[PageResult]) -> list[tuple[str, list[PageResult]]]:
-    """按分行分组，顺序 = 在 PDF 中首次出现的顺序。"""
+    """按项目/分行分组，顺序 = 在 PDF 中首次出现的顺序。
+
+    分组键做了两层容错：忽略引号形态差异、容忍 OCR 漏字（见 _same_project）。
+    显示名优先用"更完整"的那种写法。
+    """
     order: list[str] = []
     buckets: dict[str, list[PageResult]] = {}
+    display: dict[str, str] = {}
+
     for r in results:
         name = r.header.project or "未识别分行"
-        if name not in buckets:
-            buckets[name] = []
-            order.append(name)
-        buckets[name].append(r)
-    return [(name, buckets[name]) for name in order]
+        key = _branch_key(name)
+        matched = None
+        for existing in order:
+            if _same_project(existing, key):
+                matched = existing
+                break
+        if matched is None:
+            buckets[key] = [r]
+            order.append(key)
+            display[key] = name
+            continue
+        buckets[matched].append(r)
+        if len(key) > len(matched):  # 保留更完整的写法
+            display[matched] = name
+    return [(display[key], buckets[key]) for key in order]
 
 
 def average(results: list[PageResult]) -> float | None:

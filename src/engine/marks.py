@@ -24,14 +24,15 @@ SCORE_COL_START = 2
 SCORE_COL_END = 12  # 不含
 # 五个评价指标所在行（0 起的表格行号），第 9 行是"总体评分"，不读
 INDICATOR_ROWS = (4, 5, 6, 7, 8)
+# 指标名称（仅用于给人看的提示文字，识别本身不依赖它）
+INDICATOR_NAMES = ("任务分工", "沟通协调", "团结协作", "专业技术", "关爱扶持")
 
 CELL_INSET = 8  # 格内缩多少像素，避开印刷网格线
 HAS_MARK_MIN_RATIO = 0.010  # 最高格墨量低于 1% 视为没勾
 AMBIGUOUS_SECOND_RATIO = 0.25  # 次高格 ≥ 最高格 25% 视为跨格
 
-SCORE_LABELS = ("10分", "9分", "8分", "7分", "6分", "5分", "4分", "3分", "2分", "1分")
-INDICATOR_NAMES = ("任务分工", "沟通协调", "团结协作", "专业技术", "关爱扶持")
-
+# 分值列从左到右对应的分（与表头印刷的 10分…1分 一致）
+SCORE_LABELS = tuple(f"{n}分" for n in range(10, 0, -1))
 
 def _ink_ratio(mask: np.ndarray, y0: int, y1: int, x0: int, x1: int) -> float:
     ys, ye = y0 + CELL_INSET, y1 - CELL_INSET
@@ -41,11 +42,19 @@ def _ink_ratio(mask: np.ndarray, y0: int, y1: int, x0: int, x1: int) -> float:
     return float(mask[ys:ye, xs:xe].mean())
 
 
-def _ratios_for_row(mask: np.ndarray, grid: Grid, row: int) -> list[float]:
+def default_layout(grid: Grid) -> list[tuple[int, int]]:
+    """拿不到表头分值时的兜底：从左到右按 N, N-1, … 排列。"""
+    count = grid.score_column_count
+    return [(index, count - index) for index in range(count)]
+
+
+def _ratios_for_row(mask: np.ndarray, grid: Grid, row: int,
+                    columns: list[tuple[int, int]]) -> list[float]:
+    """这一行每个分值格的墨量占比（顺序与 columns 一致）。"""
     y0, y1 = grid.row_band(row)
     ratios = []
-    for c in range(SCORE_COL_START, SCORE_COL_END):
-        x0, x1 = grid.col_band(c)
+    for index, _score in columns:
+        x0, x1 = grid.score_col_band(index)
         ratios.append(_ink_ratio(mask, y0, y1, x0, x1))
     return ratios
 
@@ -57,31 +66,47 @@ class RowReading:
     ratios: list[float] = field(default_factory=list)
     note: str = ""    # 一句话：这行有什么问题
     detail: str = ""  # 技术细节（墨量等），界面上悬停才显示
+    index: int = 0    # 是第几个指标（0 起），用于取指标名称
 
 
-def read_indicator_rows(mask: np.ndarray, grid: Grid) -> list[RowReading]:
-    """读出 5 个评价指标各得几分。"""
+def read_indicator_rows(mask: np.ndarray, grid: Grid,
+                        layout: list[tuple[int, int]] | None = None) -> list[RowReading]:
+    """读出 5 个评价指标各得几分 —— 就认"墨量最大的那一格"。
+
+    如果一行里有两个格子都有明显笔迹（画叉又打勾、勾尾巴扫过、有人画了个圈），
+    不去猜是什么意思，只标黄交给人看。分数由人确认后手工改。
+    """
+    columns = layout or default_layout(grid)
     out: list[RowReading] = []
-    for row in INDICATOR_ROWS:
-        ratios = _ratios_for_row(mask, grid, row)
+    for position, row in enumerate(grid.data_rows):
+        ratios = _ratios_for_row(mask, grid, row, columns)
         best_i = int(np.argmax(ratios))
         best = ratios[best_i]
         rest = [r for i, r in enumerate(ratios) if i != best_i]
         second = max(rest) if rest else 0.0
+
         if best < HAS_MARK_MIN_RATIO:
             out.append(RowReading(row=row, score=None, ratios=ratios,
-                                  note="这一行没找到标记"))
+                                  note="这一行没找到标记", index=position))
             continue
 
         note = detail = ""
         if second >= AMBIGUOUS_SECOND_RATIO * best:
-            note = f"两个格子都有笔迹，暂取 {SCORE_LABELS[best_i]}，请确认"
-            detail = (f"{SCORE_LABELS[best_i]} 墨量 {best:.2%}，"
-                      f"{SCORE_LABELS[ratios.index(second)]} 墨量 {second:.2%}")
+            best_label = f"{columns[best_i][1]}分"
+            second_label = f"{columns[ratios.index(second)][1]}分"
+            note = f"两个格子都有笔迹，暂取 {best_label}，请确认"
+            detail = f"{best_label} 墨量 {best:.2%}，{second_label} 墨量 {second:.2%}"
 
-        out.append(RowReading(row=row, score=10 - best_i, ratios=ratios,
-                              note=note, detail=detail))
+        out.append(RowReading(row=row, score=columns[best_i][1], ratios=ratios,
+                              note=note, detail=detail, index=position))
     return out
+
+
+def indicator_name(index: int) -> str:
+    """指标名称（仅用于提示文字；换版式时名称对不上也不影响识别）。"""
+    if 0 <= index < len(INDICATOR_NAMES):
+        return INDICATOR_NAMES[index]
+    return f"第{index + 1}项"
 
 
 def sum_scores(readings: list[RowReading]) -> int | None:

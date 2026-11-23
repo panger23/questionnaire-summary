@@ -252,10 +252,13 @@ def page_image(job_id: str, page_no: int, width: int = 1300):
     finally:
         doc.close()
 
-    if len(r.grid_h) >= 11 and len(r.grid_v) >= 15:
-        y0, y1 = max(0, r.grid_h[2] - 10), r.grid_h[10] + 10
-        x0, x1 = max(0, r.grid_v[0] - 10), r.grid_v[13] + 10
-        gray = gray[y0:y1, x0:x1]
+    if abs(getattr(r, "skew", 0.0)) >= 0.1:
+        gray = deskew(gray, r.skew)
+
+    box = getattr(r, "crop_box", None)
+    if box:
+        x0, y0, x1, y1 = box
+        gray = gray[max(0, y0 - 10):y1 + 10, max(0, x0 - 10):x1 + 10]
 
     image = Image.fromarray(gray)
     if image.width > width:
