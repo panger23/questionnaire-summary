@@ -33,6 +33,17 @@ Progress = Callable[[int, int], None]
 # 两格墨量比达到这个值，才认为"两个格子里真有东西"（而不是勾尾巴扫过）
 AUTO_ADOPT_RATIO = 0.5
 
+# 整页墨迹占比低于此值 = 扫描仪夹进来的空白页。
+# 实测：正常问卷约 4.2%~4.5%，空白页只有 0.03%~0.04%，差 100 倍。
+BLANK_PAGE_MAX_INK = 0.01
+
+
+@dataclass
+class ProcessOutcome:
+    results: list["PageResult"]
+    blank_pages: list[int]
+    total_pages: int
+
 
 @dataclass(frozen=True)
 class Flag:
@@ -124,15 +135,28 @@ def _apply_llm(r: PageResult, scores: list[int | None], marks: list[int]) -> Non
 def process_pdf(pdf_path: str, dpi: int = 300, progress: Progress | None = None,
                 llm_client=None, workers: int = 4,
                 llm_progress: Callable[[int, int], None] | None = None,
-                llm_scope: str = "all") -> list[PageResult]:
-    """处理整个 PDF。llm_client 不为 None 时，额外跑一遍 LLM 通道做交叉校验。"""
+                llm_scope: str = "all") -> ProcessOutcome:
+    """处理整个 PDF。llm_client 不为 None 时，额外跑一遍 LLM 通道做交叉校验。
+
+    空白页（扫描仪夹进来的白纸）会被跳过，不计入问卷份数和平均分，
+    但页码会记录在 outcome.blank_pages 里，供界面和 Excel 提示。
+    """
     results: list[PageResult] = []
+    blank_pages: list[int] = []
     jobs: list[tuple[int, int, np.ndarray]] = []
     header_cache: dict[tuple[str, str, str], Header] = {}
     total_pages = count_pages(pdf_path)
 
     for page_no, gray in render_pages(pdf_path, dpi=dpi):
         mask = ink_mask(gray)
+
+        # 空白页：整页几乎没有墨迹 → 直接跳过
+        if mask.mean() < BLANK_PAGE_MAX_INK:
+            blank_pages.append(page_no)
+            if progress:
+                progress(page_no, total_pages)
+            continue
+
         grid = find_grid(mask)
 
         if not grid.ok:
@@ -214,7 +238,8 @@ def process_pdf(pdf_path: str, dpi: int = 300, progress: Progress | None = None,
                 f"{failures}/{total_calls} 次 LLM 调用失败（多为超时/限流），"
                 f"这些行按代码通道结果处理并标黄")
 
-    return results
+    return ProcessOutcome(results=results, blank_pages=blank_pages,
+                          total_pages=total_pages)
 
 
 def group_by_branch(results: list[PageResult]) -> list[tuple[str, list[PageResult]]]:

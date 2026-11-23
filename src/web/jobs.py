@@ -28,6 +28,8 @@ class Job:
     llm_done: int = 0
     llm_total: int = 0
     results: list[PageResult] = field(default_factory=list)
+    blank_pages: list[int] = field(default_factory=list)
+    total_pages: int = 0
     meta: dict = field(default_factory=dict)
     error: str = ""
     created: float = field(default_factory=time.time)
@@ -77,13 +79,16 @@ def _run(job: Job, client) -> None:
             job.llm_done = done
             job.llm_total = total
 
-        job.results = process_pdf(
+        outcome = process_pdf(
             tmp_path,
             progress=on_page,
             llm_client=client,
             llm_progress=on_llm if client is not None else None,
             llm_scope=job.llm_scope,
         )
+        job.results = outcome.results
+        job.blank_pages = outcome.blank_pages
+        job.total_pages = outcome.total_pages
         if client is not None:
             job.meta = {
                 "mode": ("纯代码 + LLM 复核（仅可疑页，%s）" if job.llm_scope == "flagged"
@@ -97,6 +102,8 @@ def _run(job: Job, client) -> None:
             }
         else:
             job.meta = {"mode": "纯代码模式（离线，未启用 LLM 复核）"}
+        job.meta["blank_pages"] = job.blank_pages
+        job.meta["total_pages"] = job.total_pages
         if client is not None and getattr(client, "partial_warning", ""):
             job.meta["llm_warning"] = client.partial_warning
         if client is not None and getattr(client, "channel_error", ""):

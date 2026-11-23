@@ -162,6 +162,11 @@ def build_workbook(results: list[PageResult], pdf_path: str, out_path: str | Pat
         ("源文件", Path(pdf_path).name),
         ("处理时间", datetime.now().strftime("%Y-%m-%d %H:%M:%S")),
         ("问卷份数", str(len(results))),
+        ("PDF 总页数", str(meta.get("total_pages") or len(results))),
+        ("跳过的空白页", (
+            "{} 张（第 {} 页）".format(len(meta["blank_pages"]),
+                                   "、".join(str(x) for x in meta["blank_pages"]))
+            if meta.get("blank_pages") else "无")),
         ("识别模式", mode),
         ("需人工复核份数", str(len(flagged))),
         ("需复核页码", "、".join(str(r.page) for r in flagged) or "无"),

@@ -98,6 +98,8 @@ def _snapshot(job) -> dict:
     flagged = [r for r in job.results if r.flags or r.total is None]
     stats = {
         "pages": len(job.results),
+        "blank_pages": job.blank_pages,
+        "total_pages": job.total_pages or len(job.results),
         "flagged": len(flagged),
         "flagged_pages": [r.page for r in flagged],
         "mode": job.meta.get("mode", ""),

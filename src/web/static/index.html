@@ -106,6 +106,8 @@
 
   .todo{border:1px solid #fde68a;background:#fffdf5;border-radius:12px;padding:14px 16px 10px;margin-bottom:14px}
   .todo-head{font-size:13px;font-weight:600;color:#92400e;margin-bottom:8px}
+  .todo-blank{padding:9px 12px;margin:4px 0 8px;border-radius:8px;background:#f3f6ff;
+              color:#334155;font-size:12.5px}
   .todo-item{display:flex;align-items:flex-start;gap:12px;padding:8px 0;border-top:1px dashed #f3e3b5;
              font-size:12.5px;cursor:pointer;border-radius:6px}
   .todo-item:first-of-type{border-top:none}
@@ -340,6 +342,7 @@ async function showResult() {
 function renderStats() {
   const s = DATA.stats;
   const items = [['份数', s.pages], ['待确认', s.flagged]];
+  if ((s.blank_pages || []).length) items.push(['空白页（已跳过）', `${s.blank_pages.length} 张`]);
   if (s.agree + s.disagree > 0) items.push(['双通道一致 / 不一致', `${s.agree} / ${s.disagree}`]);
   if (s.cost != null) items.push(['花费', `¥${s.cost.toFixed(2)}`]);
   items.push(['模式', s.mode, true]);
@@ -374,7 +377,11 @@ function renderSummary() {
 
 function renderTodo() {
   const items = DATA.rows.filter(r => (r.flags && r.flags.length) || r.total == null);
-  if (!items.length) { $('#todo').innerHTML = ''; return; }
+  const blanks = DATA.stats.blank_pages || [];
+  const blankHtml = blanks.length
+    ? `<div class="todo-blank">另有 ${blanks.length} 张空白页（第 ${blanks.join('、')} 页）已自动跳过，不计入汇总</div>`
+    : '';
+  if (!items.length && !blanks.length) { $('#todo').innerHTML = ''; return; }
   const rowsHtml = items.map(r => {
     const shortBranch = (r.branch || '-').replace(/^\d{4}年/, '').replace('常规审计', '');
     const flags = (r.flags && r.flags.length)
@@ -387,7 +394,9 @@ function renderTodo() {
       <button class="linkbtn" data-todoimg="${r.page}">看原图</button>
     </div>`;
   }).join('');
-  $('#todo').innerHTML = `<div class="todo"><div class="todo-head">待确认 ${items.length} 份 · 点一行可跳到表里那一行</div>${rowsHtml}</div>`;
+  const headHtml = items.length
+    ? `<div class="todo-head">待确认 ${items.length} 份 · 点一行可跳到表里那一行</div>` : '';
+  $('#todo').innerHTML = `<div class="todo">${headHtml}${blankHtml}${rowsHtml}</div>`;
   $('#todo').querySelectorAll('[data-jump]').forEach(el => {
     el.onclick = (e) => {
       if (e.target.dataset.todoimg) return;

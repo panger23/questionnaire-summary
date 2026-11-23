@@ -70,9 +70,10 @@ def main(argv: list[str] | None = None) -> int:
             print(f"  已处理 {page} 页…", flush=True)
 
     print(f"正在处理：{pdf.name}")
-    results = process_pdf(str(pdf), dpi=args.dpi, progress=progress,
+    outcome = process_pdf(str(pdf), dpi=args.dpi, progress=progress,
                           llm_client=client, workers=args.workers,
                           llm_scope=args.llm_scope)
+    results = outcome.results
     elapsed = time.time() - started
 
     meta: dict = {}
@@ -88,13 +89,18 @@ def main(argv: list[str] | None = None) -> int:
             "cost": client.estimated_cost(),
         }
 
+    meta["blank_pages"] = outcome.blank_pages
+    meta["total_pages"] = outcome.total_pages
+
     out = Path(args.output) if args.output else (
         Path("output") / f"{pdf.stem}_汇总_{time.strftime('%Y%m%d_%H%M')}.xlsx"
     )
     build_workbook(results, str(pdf), out, meta=meta)
 
     print()
-    print(f"共 {len(results)} 份问卷，用时 {elapsed:.1f}s")
+    blank = f"，跳过 {len(outcome.blank_pages)} 张空白页（第 " + \
+            "、".join(str(p) for p in outcome.blank_pages) + " 页）" if outcome.blank_pages else ""
+    print(f"共 {len(results)} 份问卷{blank}，用时 {elapsed:.1f}s")
     print(f"{'分行':<28}{'份数':>5}{'代职人':>10}{'平均分':>12}")
     print("-" * 58)
     for name, items in group_by_branch(results):
