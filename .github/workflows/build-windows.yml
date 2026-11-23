@@ -67,6 +67,18 @@ jobs:
 
           Compress-Archive -Path "dist\发布\LuShen" -DestinationPath "dist\LuShen-windows.zip" -CompressionLevel Optimal -Force
 
+      - name: 制作 90MB 分卷（微信/邮件单文件有大小限制）
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path "dist\分卷" | Out-Null
+          $sevenZip = "C:\Program Files\7-Zip\7z.exe"
+          if (-not (Test-Path $sevenZip)) { $sevenZip = "C:\Program Files (x86)\7-Zip\7z.exe" }
+          if (-not (Test-Path $sevenZip)) { throw "找不到 7z.exe" }
+          & $sevenZip a -v90m -mx=5 "dist\分卷\LuShen-windows.7z" "dist\发布\LuShen" | Select-Object -Last 3
+          Get-ChildItem "dist\分卷" | ForEach-Object {
+            Write-Host ("  {0}  {1:N1} MB" -f $_.Name, ($_.Length / 1MB))
+          }
+
       - name: 显示体积
         shell: pwsh
         run: |
@@ -79,7 +91,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: LuShen-windows
-          path: dist/LuShen-windows.zip
+          path: |
+            dist/LuShen-windows.zip
+            dist/分卷/*.7z.*
           retention-days: 60
 
       - name: 发布到 Release（免登录直接下载）
@@ -98,5 +112,15 @@ jobs:
           - 解压后双击 `start.bat`，Chrome 会自动打开操作页面
           - 首次运行如遇「未知发布者」提示，点「更多信息 → 仍要运行」
           - 使用说明见压缩包内的 `README.txt`
+
+          ### 分卷版（单个文件 90MB，适合微信/邮件传输）
+
+          如果一次传输不能超过 100MB，请下载 `LuShen-windows.7z.001`、`.002`……
+          全部放到同一个文件夹后，用 **7-Zip** 或 **WinRAR** 右键点 `.001` → 提取即可。
+
+          > 只有一个文件 `.zip`（175MB），适合 U 盘/内网共享盘传输。
           "@
-          gh release create $tag "dist\LuShen-windows.zip" --title "鲁审 · 汇卷 $tag" --notes $notes --latest
+          $assets = @("dist\LuShen-windows.zip")
+          $assets += Get-ChildItem "dist\分卷\*.7z.*" | ForEach-Object { $_.FullName }
+          Write-Host "将上传：$($assets.Count) 个文件"
+          gh release create $tag @assets --title "鲁审 · 汇卷 $tag" --notes $notes --latest
