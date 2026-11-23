@@ -1,8 +1,9 @@
-# 汇卷 · 扫描件智能汇总
+# 鲁审 · 汇卷（扫描件智能汇总）
 
 把扫描的《审计项目组组员满意度调查问卷》PDF 自动整理成汇总 Excel。
 
-> 名字叫「汇卷」——汇 = 汇总归集，卷 = 问卷/卷宗。不绑死在"审计问卷"上，以后加别的扫描件处理功能也不用改名。
+> **鲁审** 是产品名（山东 + 审计），**汇卷** 是当前模块名（扫描件 → 汇总表）。
+> 这样以后新增功能可以按模块扩展（鲁审 · 台账、鲁审 · 核验…），名字不会和功能对不上。
 > 仓库名仍是 `questionnaire-summary`。
 
 ## 它做什么
@@ -115,7 +116,7 @@ CI 里另有硬检查：仓库中一旦出现 PDF/图片/表格文件，构建�
 ```bash
 pip install pyinstaller
 pyinstaller --clean --noconfirm packaging/app.spec
-# 产物：dist/HuiJuan/  （双击 HuiJuan.exe 即启动网页）
+# 产物：dist/LuShen/  （双击 LuShen.exe 即启动网页）
 ```
 
 - 打包配置在 `packaging/app.spec`（onedir 模式：启动快、杀软误报少）

@@ -4,7 +4,7 @@
 用法：
     pyinstaller --clean --noconfirm build/app.spec
 
-产物：dist/HuiJuan/  （onedir 形式：启动快、杀软误报少）
+产物：dist/LuShen/  （onedir 形式：启动快、杀软误报少）
 """
 import os
 import sys
@@ -12,7 +12,7 @@ from pathlib import Path
 
 from PyInstaller.utils.hooks import collect_data_files, collect_dynamic_libs
 
-APP_NAME = "HuiJuan"
+APP_NAME = "LuShen"
 
 # spec 文件和入口脚本不在同一层：以项目根目录为基准解析所有相对路径
 ROOT = Path(SPECPATH).resolve().parent   # noqa: F821 - SPECPATH 由 PyInstaller 注入

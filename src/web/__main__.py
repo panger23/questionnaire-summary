@@ -80,7 +80,7 @@ def main(argv: list[str] | None = None) -> None:
     url = f"http://{HOST}:{port}"
     _say(
         "",
-        "  汇卷 · 扫描件智能汇总",
+        "  鲁审 · 汇卷（扫描件智能汇总）",
         "  ─────────────────────",
         f"  已启动：{url}",
         "  浏览器没自动打开的话，把上面这行复制到 Chrome 里",

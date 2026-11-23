@@ -31,7 +31,7 @@ jobs:
       - name: 冒烟测试（打包后的程序能不能起来并响应首页）
         shell: pwsh
         run: |
-          $proc = Start-Process -FilePath "dist\HuiJuan\HuiJuan.exe" `
+          $proc = Start-Process -FilePath "dist\LuShen\LuShen.exe" `
             -ArgumentList "--no-browser","--port","8799" -PassThru
           $ok = $false
           for ($i = 0; $i -lt 40; $i++) {
@@ -49,9 +49,9 @@ jobs:
         shell: pwsh
         run: |
           $root = "dist\发布"
-          $app  = Join-Path $root "HuiJuan"
+          $app  = Join-Path $root "LuShen"
           New-Item -ItemType Directory -Force -Path $app | Out-Null
-          Copy-Item "dist\HuiJuan\*" $app -Recurse
+          Copy-Item "dist\LuShen\*" $app -Recurse
           Copy-Item "packaging\使用说明.txt" (Join-Path $app "README.txt")
 
           # 双击启动脚本（文件名用 ASCII，避免压缩包解压后中文乱码）
@@ -59,25 +59,25 @@ jobs:
           @echo off
           chcp 65001 >nul
           cd /d "%~dp0"
-          echo Starting HuiJuan ... keep this window open; closing it stops the service.
-          "HuiJuan.exe"
+          echo Starting LuShen ... keep this window open; closing it stops the service.
+          "LuShen.exe"
           if errorlevel 1 pause
           "@
           Set-Content -Path (Join-Path $app "start.bat") -Value $bat -Encoding ascii
 
-          Compress-Archive -Path "dist\发布\HuiJuan" -DestinationPath "dist\HuiJuan-windows.zip" -CompressionLevel Optimal -Force
+          Compress-Archive -Path "dist\发布\LuShen" -DestinationPath "dist\LuShen-windows.zip" -CompressionLevel Optimal -Force
 
       - name: 显示体积
         shell: pwsh
         run: |
-          $zip = Get-Item "dist\HuiJuan-windows.zip"
+          $zip = Get-Item "dist\LuShen-windows.zip"
           Write-Host ("压缩包：{0:N1} MB" -f ($zip.Length / 1MB))
-          $dir = (Get-ChildItem "dist\发布\HuiJuan" -Recurse | Measure-Object -Property Length -Sum).Sum
+          $dir = (Get-ChildItem "dist\发布\LuShen" -Recurse | Measure-Object -Property Length -Sum).Sum
           Write-Host ("解压后：{0:N1} MB" -f ($dir / 1MB))
 
       - name: 上传产物
         uses: actions/upload-artifact@v4
         with:
-          name: HuiJuan-windows
-          path: dist/HuiJuan-windows.zip
+          name: LuShen-windows
+          path: dist/LuShen-windows.zip
           retention-days: 60
