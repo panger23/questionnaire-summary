@@ -1,5 +1,5 @@
 """问卷扫描件汇总引擎。"""
-__version__ = "1.1.2"
+__version__ = "1.1.3"
 
 
 from datetime import datetime as _dt
