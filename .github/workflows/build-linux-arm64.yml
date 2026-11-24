@@ -44,47 +44,16 @@ jobs:
             quay.io/pypa/manylinux_2_28_aarch64:latest \
             bash packaging/build-linux-arm64.sh 2>&1 | tee /tmp/build.log
 
-      - name: 失败时把日志推到 ci-log 分支（免登录可读，事后删掉即可）
-        if: failure()
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          branch="ci-log-${GITHUB_RUN_ID}"
-          git checkout -B "$branch"
-          if [ -f /tmp/build.log ]; then cp /tmp/build.log "build-log-${GITHUB_RUN_ID}.txt"; fi
-          {
-            echo "run: ${GITHUB_RUN_ID}  ref: ${GITHUB_REF}"
-            uname -a
-            docker version --format '{{.Server.Version}}' 2>&1 || true
-            free -h 2>/dev/null || true
-            df -h / 2>/dev/null || true
-          } > "build-env-${GITHUB_RUN_ID}.txt"
-          git add -f "build-log-${GITHUB_RUN_ID}.txt" "build-env-${GITHUB_RUN_ID}.txt" || true
-          git commit -m "CI 失败日志 run ${GITHUB_RUN_ID}" || true
-          git push -f origin "$branch"
-
       - name: 兼容性复验（干净的 Debian 11 = 麒麟 V10 的底座，glibc 2.31）
         # 只在自己机器上能跑不算数：这里故意换一个和麒麟同底座、
-        # 但没有构建环境残留依赖的干净系统，从零启动一次。
+        # 但没有构建环境残留依赖的干净系统，从零启动一次（不装任何东西、不联网）。
         run: |
-          docker run --rm -v "$GITHUB_WORKSPACE/dist:/dist:ro" debian:bullseye-slim bash -lc '
-            set -u
-            apt-get update -qq >/dev/null 2>&1
-            apt-get install -y -qq curl >/dev/null 2>&1
-            echo "试跑环境：$(uname -m) / $(cat /etc/debian_version) / glibc $(ldd --version | head -1 | awk "{print \$NF}")"
-            /dist/LuShen/LuShen --no-browser --port 8800 >/tmp/app.log 2>&1 &
-            for i in $(seq 1 90); do
-              code=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:8800/ || true)
-              if [ "$code" = "200" ]; then
-                echo "干净环境启动成功：首页返回 200"
-                exit 0
-              fi
-              sleep 1
-            done
-            echo "::error::在干净 Debian 11 里没能启动"
-            cat /tmp/app.log
-            exit 1
-          '
+          set -o pipefail
+          docker run --rm \
+            -v "$GITHUB_WORKSPACE/dist:/dist:ro" \
+            -v "$GITHUB_WORKSPACE/packaging:/packaging:ro" \
+            debian:bullseye-slim \
+            bash /packaging/compat-test.sh 2>&1 | tee /tmp/compat.log
 
       - name: 上传产物
         uses: actions/upload-artifact@v4
@@ -117,3 +86,22 @@ jobs:
             --title "鲁小审 · 汇卷 $tag（信创 Linux arm64）" \
             --notes-file /tmp/notes.md \
             || gh release upload "$tag" dist/LuShen-linux-aarch64.zip --clobber
+
+      - name: 失败时把日志推到 ci-log 分支（免登录可读，事后删掉即可）
+        if: failure()
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          branch="ci-log-${GITHUB_RUN_ID}"
+          git checkout -B "$branch"
+          [ -f /tmp/build.log ] && cp /tmp/build.log "build-log-${GITHUB_RUN_ID}.txt" || true
+          [ -f /tmp/compat.log ] && cp /tmp/compat.log "compat-log-${GITHUB_RUN_ID}.txt" || true
+          {
+            echo "run: ${GITHUB_RUN_ID}  ref: ${GITHUB_REF}"
+            uname -a
+            docker version --format '{{.Server.Version}}' 2>&1 || true
+            free -h 2>/dev/null || true
+          } > "build-env-${GITHUB_RUN_ID}.txt"
+          git add -f "build-log-${GITHUB_RUN_ID}.txt" "compat-log-${GITHUB_RUN_ID}.txt" "build-env-${GITHUB_RUN_ID}.txt" || true
+          git commit -m "CI 失败日志 run ${GITHUB_RUN_ID}" || true
+          git push -f origin "$branch"
