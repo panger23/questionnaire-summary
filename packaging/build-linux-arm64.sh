@@ -8,20 +8,41 @@
 # 为什么用 manylinux_2_28：它把 glibc 下限锁在 2.28，
 # 而银河麒麟桌面 V10 SP1（Debian 11 底座）是 glibc 2.31，所以能跑；
 # 反过来（在 glibc 2.3x 的新系统上构建）就会在麒麟上报 GLIBC 版本过低。
+#
+# 为什么不直接用镜像里的 /opt/python：manylinux 的 CPython 是静态编译的（没有
+# libpython.so），PyInstaller 明确要求共享库，所以这里额外下载一份
+# python-build-standalone（带 libpython3.11.so，且同样是 glibc 2.17 打底）。
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
-# manylinux 镜像里有多个 Python，优先用 3.11（和 Windows 包保持一致）
+# ---- Python 3.11（python-build-standalone，带共享库） ----
+PBS_TAG="${PBS_TAG:-20261123}"
+PBS_VER="${PBS_VER:-3.11.18}"
+PBS_DIR="${PBS_DIR:-/opt/pbs}"
+PBS_URL="https://github.com/astral-sh/python-build-standalone/releases/download/${PBS_TAG}/cpython-${PBS_VER}+${PBS_TAG}-aarch64-unknown-linux-gnu-install_only.tar.gz"
+
 PY="${PYTHON_BIN:-}"
 if [ -z "$PY" ]; then
-  for cand in /opt/python/cp311-cp311/bin/python /opt/python/cp312-cp312/bin/python; do
-    [ -x "$cand" ] && PY="$cand" && break
-  done
+  if [ ! -x "$PBS_DIR/python/bin/python3" ]; then
+    echo "== 下载 python-build-standalone ${PBS_VER}（${PBS_TAG}）"
+    mkdir -p "$PBS_DIR"
+    # 用镜像自带的 python 下载，不依赖 curl/wget
+    BOOT_PY="$(command -v python3.11 || command -v python3)"
+    "$BOOT_PY" - "$PBS_URL" /tmp/pbs.tar.gz <<'PY'
+import sys, urllib.request
+url, dest = sys.argv[1], sys.argv[2]
+print("GET", url)
+urllib.request.urlretrieve(url, dest)
+PY
+    tar -xzf /tmp/pbs.tar.gz -C "$PBS_DIR"
+    rm -f /tmp/pbs.tar.gz
+  fi
+  PY="$PBS_DIR/python/bin/python3"
 fi
-[ -n "$PY" ] || PY="$(command -v python3)"
-echo "== 构建机：$(uname -m)，Python：$("$PY" -V 2>&1)"
+"$PY" -V
+echo "== 构建机：$(uname -m)，Python：$("$PY" -V 2>&1)，glibc：$(ldd --version 2>/dev/null | head -1)"
 
 echo "== 安装依赖"
 "$PY" -m pip install -q --upgrade pip
@@ -46,6 +67,13 @@ PY
 
 echo "== PyInstaller 打包"
 "$PY" -m PyInstaller --clean --noconfirm packaging/app.spec
+
+echo "== 成品依赖的 glibc 版本（必须 ≤ 2.31，麒麟 V10 SP1 是 2.31）"
+if command -v objdump >/dev/null 2>&1; then
+  find dist/LuShen -type f \( -name '*.so' -o -name '*.so.*' -o -perm -u+x \) -print0 2>/dev/null \
+    | xargs -0 -r objdump -T 2>/dev/null \
+    | grep -oE 'GLIBC_[0-9]+\.[0-9]+' | sort -u -V | tail -n 3 || true
+fi
 
 echo "== 冒烟测试：起服务、请求首页"
 ./dist/LuShen/LuShen --no-browser --port 8799 >/tmp/lushen-smoke.log 2>&1 &
