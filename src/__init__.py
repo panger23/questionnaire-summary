@@ -2,17 +2,13 @@
 __version__ = "1.1.2"
 
 
+from datetime import datetime as _dt
+
+# 进程启动时（模块被 import 的那一刻）就固定下来，之后 pull 到新代码也不会变——
+# 这样"页脚显示的时间早于你 pull 的时间"就说明服务器还跑着旧进程。
+_PROCESS_STARTED = _dt.now()
+
+
 def build_stamp() -> str:
-    """代码版本 + 源码最后修改时间。
-
-    用来判断"当前跑的是不是最新代码"：服务是启动时加载代码的，
-    改了代码不重启就还是旧逻辑；界面/窗口里显示的时间能一眼看出来。
-    """
-    from datetime import datetime
-    from pathlib import Path
-
-    newest = 0.0
-    for path in Path(__file__).parent.rglob("*.py"):
-        newest = max(newest, path.stat().st_mtime)
-    when = datetime.fromtimestamp(newest).strftime("%m-%d %H:%M")
-    return f"v{__version__}（代码更新于 {when}）"
+    """给界面/启动窗口显示的一句话：当前进程是哪个版本、什么时候启动的。"""
+    return f"v{__version__} · 服务启动于 {_PROCESS_STARTED:%m-%d %H:%M}"

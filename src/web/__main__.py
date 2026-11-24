@@ -82,7 +82,7 @@ def main(argv: list[str] | None = None) -> None:
     _say(
         "",
         "  鲁小审 · 汇卷（扫描件智能汇总）",
-        f"  {build_stamp()}",
+        f"  {build_stamp()}   端口 {port}",
         "  ─────────────────────",
         f"  已启动：{url}",
         "  浏览器没自动打开的话，把上面这行复制到 Chrome 里",
