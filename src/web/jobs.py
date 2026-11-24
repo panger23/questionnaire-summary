@@ -29,13 +29,20 @@ class Job:
     llm_total: int = 0
     results: list[PageResult] = field(default_factory=list)
     blank_pages: list[int] = field(default_factory=list)
-    total_pages: int = 0
     meta: dict = field(default_factory=dict)
     error: str = ""
     created: float = field(default_factory=time.time)
 
 
 class JobStore:
+    """内存里只保留最近若干次任务。
+
+    每个任务都攥着整份 PDF（十几 MB）+ 识别结果，长期使用如果一直留着，
+    内存会一路涨到几百 MB 甚至上 GB —— 所以按数量淘汰，跑着的任务不淘汰。
+    """
+
+    MAX_JOBS = 8
+
     def __init__(self) -> None:
         self._jobs: dict[str, Job] = {}
         self._lock = threading.Lock()
@@ -46,7 +53,21 @@ class JobStore:
                   use_llm=use_llm, llm_scope=llm_scope)
         with self._lock:
             self._jobs[job.id] = job
+            self._evict_locked()
         return job
+
+    def _evict_locked(self) -> None:
+        """超出上限就丢掉最老的那些（只丢已结束的，正在跑的不动）。"""
+        if len(self._jobs) <= self.MAX_JOBS:
+            return
+        finished = sorted(
+            (j for j in self._jobs.values() if j.status in ("done", "error")),
+            key=lambda j: j.created,
+        )
+        for job in finished:
+            if len(self._jobs) <= self.MAX_JOBS:
+                break
+            self._jobs.pop(job.id, None)
 
     def get(self, job_id: str) -> Job | None:
         with self._lock:

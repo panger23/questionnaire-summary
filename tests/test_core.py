@@ -160,6 +160,56 @@ class WebSerializationTests(unittest.TestCase):
         self.assertEqual(len(r.flags), 2)
 
 
+class JobStoreTests(unittest.TestCase):
+    """内存里的任务必须按数量淘汰，否则长期使用内存只涨不降。"""
+
+    def test_evicts_finished_jobs_only(self):
+        from src.web.jobs import JobStore
+
+        store = JobStore()
+        store.MAX_JOBS = 2
+        a = store.create("a.pdf", b"%PDF-1", False)
+        a.status = "done"
+        b = store.create("b.pdf", b"%PDF-2", False)
+        b.status = "error"
+        c = store.create("c.pdf", b"%PDF-3", False)
+        c.status = "running"
+        d = store.create("d.pdf", b"%PDF-4", False)  # queued
+
+        self.assertIsNone(store.get(a.id))       # 最老的已完成任务被淘汰
+        self.assertIsNone(store.get(b.id))
+        self.assertIsNotNone(store.get(c.id))    # 跑着的不能丢
+        self.assertIsNotNone(store.get(d.id))
+
+    def test_never_evicts_running(self):
+        from src.web.jobs import JobStore
+
+        store = JobStore()
+        store.MAX_JOBS = 1
+        running = [store.create(f"r{i}.pdf", b"%PDF", False) for i in range(3)]
+        for job in running:
+            job.status = "running"
+        self.assertTrue(all(store.get(job.id) is not None for job in running))
+
+
+class AnnotateTests(unittest.TestCase):
+    """给模型的行图标签必须跟随表格实际档位，不能写死 10..1。"""
+
+    def test_custom_labels(self):
+        from src.llm.prep import BAND_HEIGHT, annotate_row
+
+        img = np.full((60, 500, 3), 255, dtype=np.uint8)
+        out = annotate_row(img, ["5", "4", "3", "2", "1"])
+        self.assertEqual(out.shape[0], 60 + BAND_HEIGHT)
+        self.assertEqual(out.shape[1], 500)
+
+    def test_default_labels(self):
+        from src.llm.prep import annotate_row
+
+        img = np.full((60, 500, 3), 255, dtype=np.uint8)
+        self.assertEqual(annotate_row(img).shape[0], 60 + 46)
+
+
 class LayoutConstantTests(unittest.TestCase):
     def test_geometry_expectations(self):
         self.assertEqual(len(H), 11)

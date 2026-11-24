@@ -36,8 +36,14 @@ def _font(size: int = FONT_SIZE):
     return ImageFont.load_default()
 
 
-def annotate_row(rgb: np.ndarray, ncol: int = 10) -> np.ndarray:
-    """在一行评分图的上方加一条白带，把 10、9、…、1 印在各个格子正上方。"""
+def annotate_row(rgb: np.ndarray, labels: list[str] | None = None) -> np.ndarray:
+    """在一行评分图的上方加一条白带，把每格的分值印在正上方。
+
+    labels 由调用方按这张表的实际档位给（10 档就是 10..1，5 档就是 5..1），
+    不写死 10..1，否则换个分制的表格就会给模型贴错标签。
+    """
+    labels = list(labels) if labels else [str(n) for n in range(10, 0, -1)]
+    ncol = len(labels)
     image = Image.fromarray(rgb)
     width, height = image.size
     canvas = Image.new("RGB", (width, height + BAND_HEIGHT), "white")
@@ -45,8 +51,7 @@ def annotate_row(rgb: np.ndarray, ncol: int = 10) -> np.ndarray:
     draw = ImageDraw.Draw(canvas)
     cell_width = width / ncol
     font = _font(FONT_SIZE)
-    for i in range(ncol):
-        label = str(10 - i)
+    for i, label in enumerate(labels):
         center_x = cell_width * i + cell_width / 2
         text_width = draw.textlength(label, font=font)
         draw.text((center_x - text_width / 2, 2), label, fill="black", font=font)

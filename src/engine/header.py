@@ -13,6 +13,7 @@
 from __future__ import annotations
 
 import re
+import threading
 from dataclasses import dataclass
 
 import numpy as np
@@ -20,6 +21,7 @@ import numpy as np
 from .grid import _merge_runs
 
 _OCR = None
+_OCR_LOCK = threading.Lock()  # OCR 引擎是全局单例，多个任务同时跑时串行调用
 
 PROJECT_RE = re.compile(r"\d{4}\s*年.*?(分行|审计|项目)")
 SCORE_RE = re.compile(r"(\d+)\s*分")
@@ -117,7 +119,8 @@ def _cell_bounds(crop: np.ndarray) -> list[tuple[int, int]]:
 
 def _ocr_cell_text(cell: np.ndarray) -> str:
     """对单个单元格做 OCR，按阅读顺序拼成一串文字（不含空白）。"""
-    result, _ = _ocr()(_to_bgr(cell))
+    with _OCR_LOCK:
+        result, _ = _ocr()(_to_bgr(cell))
     items = []
     for box, text, score in result or []:
         cleaned = _clean(text)
@@ -179,7 +182,8 @@ def _ocr_selected_cells(crop: np.ndarray, bounds: list[tuple[int, int]],
         bands.append((offset, offset + sl.shape[0]))
         offset += sl.shape[0] + gap
 
-    result, _ = _ocr()(_to_bgr(canvas))
+    with _OCR_LOCK:
+        result, _ = _ocr()(_to_bgr(canvas))
     found: list[list[tuple[float, float, str]]] = [[] for _ in indices]
     for box, text, score in result or []:
         cleaned = _clean(text)
@@ -289,7 +293,8 @@ def read_score_layout(gray: np.ndarray, grid) -> list[tuple[int, int]] | None:
     if strip.size == 0:
         return None
 
-    result, _ = _ocr()(_to_bgr(strip))
+    with _OCR_LOCK:
+        result, _ = _ocr()(_to_bgr(strip))
     found: dict[int, int] = {}
     for box, text, score in result or []:
         match = SCORE_RE.search(_clean(text) or "")
@@ -311,7 +316,8 @@ def read_score_layout(gray: np.ndarray, grid) -> list[tuple[int, int]] | None:
 
 def parse_header(crop: np.ndarray) -> Header:
     """对表头裁图做 OCR 并解析三个字段。"""
-    result, _ = _ocr()(_to_bgr(crop))
+    with _OCR_LOCK:
+        result, _ = _ocr()(_to_bgr(crop))
     items = []
     for box, text, score in result or []:
         cleaned = _clean(text)

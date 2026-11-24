@@ -447,7 +447,7 @@ function renderDetail() {
       const diff = r.llm_scores && r.llm_scores[i] != null && r.llm_scores[i] !== v;
       const cls = (v == null || diff) ? ' class="diff"' : '';
       const title = diff ? ` title="LLM 判为 ${r.llm_scores[i]}"` : '';
-      html += `<td><input type="number" min="1" max="10" value="${v ?? ''}"${cls}
+      html += `<td><input type="number" min="1" max="${r.max_score || 10}" value="${v ?? ''}"${cls}
                data-page="${r.page}" data-row="${i}"${title}></td>`;
     });
     const pill = r.agree == null ? '<span class="pill none">—</span>'

@@ -116,12 +116,12 @@ class VisionClient:
         self._client = OpenAI(base_url=api_base, api_key=api_key,
                               timeout=timeout, max_retries=0)
 
-    def read_row(self, rgb: np.ndarray) -> RowVerdict | None:
+    def read_row(self, rgb: np.ndarray, labels: list[str] | None = None) -> RowVerdict | None:
         """读一行评分：返回 (分值, 标记数)，无法判断返回 None。
 
         429 限流和超时会做指数退避重试 —— 免费档模型并发很低，不重试基本跑不完。
         """
-        b64 = base64.b64encode(_png_bytes(annotate_row(rgb))).decode("ascii")
+        b64 = base64.b64encode(_png_bytes(annotate_row(rgb, labels))).decode("ascii")
         content = [
             {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{b64}"}},
             {"type": "text", "text": ROW_PROMPT},

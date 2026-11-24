@@ -14,7 +14,7 @@ from pathlib import Path
 import numpy as np
 import pymupdf
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
-from fastapi.responses import FileResponse, HTMLResponse, Response
+from fastapi.responses import HTMLResponse, Response
 from openai import OpenAI
 from PIL import Image
 from pydantic import BaseModel
@@ -78,6 +78,7 @@ def _row(r) -> dict:
         "flags": [{"short": f.short, "detail": f.detail} for f in r.flags],
         "adopted": r.adopted,
         "grid_ok": r.grid_ok,
+        "max_score": r.max_score,
     }
 
 
@@ -210,8 +211,9 @@ def edit_score(job_id: str, body: EditIn):
         raise HTTPException(404, "找不到这一页")
     if not 0 <= body.row < len(r.readings):
         raise HTTPException(400, "行号超出范围")
-    if body.score is not None and not 1 <= body.score <= 10:
-        raise HTTPException(400, "分数必须在 1~10 之间")
+    top = r.max_score or 10
+    if body.score is not None and not 1 <= body.score <= top:
+        raise HTTPException(400, f"分数必须在 1~{top} 之间")
     r.readings[body.row].score = body.score
     r.total = sum_scores(r.readings)
     _add_flag(r, "这一行手动改过分数", "人工核对后修正确认")
@@ -277,12 +279,21 @@ def download(job_id: str):
         raise HTTPException(404, "任务不存在")
     if job.status != "done":
         raise HTTPException(409, "任务还没完成")
+    from urllib.parse import quote
+
     stem = Path(job.filename).stem
     name = f"{stem}_汇总_{time.strftime('%Y%m%d_%H%M')}.xlsx"
-    out = Path(tempfile.gettempdir()) / name
-    build_workbook(job.results, job.filename, out, meta=job.meta)
-    return FileResponse(str(out), filename=name,
-                        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+    # 生成到临时目录 → 读进内存 → 立刻删掉，避免长期使用把 /tmp 撑满
+    with tempfile.TemporaryDirectory(prefix="qsum_xlsx_") as tmpdir:
+        out = Path(tmpdir) / name
+        build_workbook(job.results, job.filename, out, meta=job.meta)
+        data = out.read_bytes()
+    headers = {"Content-Disposition": f"attachment; filename*=UTF-8''{quote(name)}"}
+    return Response(
+        data,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers=headers,
+    )
 
 
 # ---------------------------------------------------------------- 设置

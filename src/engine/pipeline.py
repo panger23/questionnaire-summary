@@ -64,6 +64,7 @@ class PageResult:
     grid_h: list[int] = field(default_factory=list)
     grid_v: list[int] = field(default_factory=list)
     skew: float = 0.0  # 这一页被纠正的角度，原图预览时要按同样角度转
+    max_score: int = 10  # 这张表最高档是几分（10 档 / 5 档 / 100 分制都可能）
     crop_box: tuple[int, int, int, int] | None = None  # 表格区域，供"看原图"裁切
 
     @property
@@ -221,7 +222,7 @@ def process_pdf(pdf_path: str, dpi: int = 300, progress: Progress | None = None,
                 PageResult(page=page_no, header=Header("", "", ""), readings=[],
                            total=None, grid_ok=False,
                            flags=[Flag("这一页的表格没找到，请人工核对", grid.note)],
-                           skew=angle,
+                           skew=angle, max_score=10,
                            grid_h=list(grid.h), grid_v=list(grid.v))
             )
             if progress:
@@ -251,6 +252,7 @@ def process_pdf(pdf_path: str, dpi: int = 300, progress: Progress | None = None,
             PageResult(page=page_no, header=header, readings=readings,
                        total=sum_scores(readings), grid_ok=True, flags=flags,
                        grid_h=list(grid.h), grid_v=list(grid.v), skew=angle,
+                       max_score=max(score for _i, score in score_layout),
                        crop_box=(grid.v[0], grid.h[max(0, grid.header_row - 1)],
                                  grid.v[-1], grid.h[-1]))
         )
@@ -272,7 +274,8 @@ def process_pdf(pdf_path: str, dpi: int = 300, progress: Progress | None = None,
 
         collected: dict[tuple[int, int], object] = {}
         with ThreadPoolExecutor(max_workers=max(1, workers)) as pool:
-            futures = {pool.submit(llm_client.read_row, rgb): (pi, ri)
+            llm_labels = [f"{score}" for _i, score in (score_layout or [])] or None
+            futures = {pool.submit(llm_client.read_row, rgb, llm_labels): (pi, ri)
                        for pi, ri, rgb in jobs}
             done = 0
             finished_per_page: dict[int, int] = {}
