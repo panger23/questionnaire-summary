@@ -28,6 +28,22 @@ jobs:
       - name: 打包
         run: pyinstaller --clean --noconfirm packaging/app.spec
 
+      - name: 精简体积（删掉程序永远用不到的 PyMuPDF 版面分析模型）
+        # 我们自己的表格识别完全基于像素投影，不使用 PyMuPDF 的 layout / find_tables，
+        # 这些 ONNX 模型和开发用头文件（合计约 55MB）删掉不影响任何功能。
+        shell: pwsh
+        run: |
+          $base = "dist\LuShen\_internal\pymupdf"
+          foreach ($d in @("layout", "mupdf-devel")) {
+            $path = Join-Path $base $d
+            if (Test-Path $path) {
+              Remove-Item -Recurse -Force $path
+              Write-Host "已删除 _internal/pymupdf/$d"
+            }
+          }
+          $size = (Get-ChildItem "dist\LuShen" -Recurse -File | Measure-Object Length -Sum).Sum / 1MB
+          Write-Host ("精简后未压缩体积：{0:N1} MB" -f $size)
+
       - name: 冒烟测试（打包后的程序能不能起来并响应首页）
         shell: pwsh
         run: |

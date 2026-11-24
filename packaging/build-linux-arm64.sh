@@ -68,6 +68,19 @@ PY
 echo "== PyInstaller 打包"
 "$PY" -m PyInstaller --clean --noconfirm packaging/app.spec
 
+echo "== 精简体积"
+# 1) 删掉程序永远用不到的 PyMuPDF 版面分析模型和开发头文件（约 51MB）
+rm -rf dist/LuShen/_internal/pymupdf/layout dist/LuShen/_internal/pymupdf/mupdf-devel
+# 2) strip 掉调试符号（不改变任何功能，只是去掉符号表）
+if command -v strip >/dev/null 2>&1; then
+  find dist/LuShen -type f \( -name '*.so' -o -name '*.so.*' \) -print0 2>/dev/null \
+    | xargs -0 -r strip --strip-unneeded 2>/dev/null || true
+  strip --strip-unneeded dist/LuShen/LuShen 2>/dev/null || true
+  echo "已 strip 动态库和主程序"
+fi
+echo -n "精简后未压缩体积："
+du -sh dist/LuShen | cut -f1
+
 echo "== 成品依赖的 glibc 版本（必须 ≤ 2.31，麒麟 V10 SP1 是 2.31）"
 if command -v objdump >/dev/null 2>&1; then
   find dist/LuShen -type f \( -name '*.so' -o -name '*.so.*' -o -perm -u+x \) -print0 2>/dev/null \
