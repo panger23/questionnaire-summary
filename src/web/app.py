@@ -19,7 +19,7 @@ from openai import OpenAI
 from PIL import Image
 from pydantic import BaseModel
 
-from .. import __version__
+from .. import __version__, build_stamp
 from ..engine.pipeline import Flag, average, group_by_branch, sum_scores
 from ..engine.render import deskew
 from ..export.xlsx import build_workbook
@@ -129,7 +129,8 @@ def index() -> HTMLResponse:
         raise HTTPException(500, f"页面文件缺失：{page}")
     html = page.read_text("utf-8")
     html = (html.replace("{{VERSION}}", __version__)
-                .replace("{{YEAR}}", str(datetime.now().year)))
+                .replace("{{YEAR}}", str(datetime.now().year))
+                .replace("{{STAMP}}", build_stamp()))
     return HTMLResponse(html)
 
 
