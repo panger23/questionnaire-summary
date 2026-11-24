@@ -90,18 +90,24 @@ jobs:
       - name: 失败时把日志推到 ci-log 分支（免登录可读，事后删掉即可）
         if: failure()
         run: |
+          set +e
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           branch="ci-log-${GITHUB_RUN_ID}"
-          git checkout -B "$branch"
-          [ -f /tmp/build.log ] && cp /tmp/build.log "build-log-${GITHUB_RUN_ID}.txt" || true
-          [ -f /tmp/compat.log ] && cp /tmp/compat.log "compat-log-${GITHUB_RUN_ID}.txt" || true
+          git checkout -B "$branch" || true
+          mkdir -p ci-diag
           {
             echo "run: ${GITHUB_RUN_ID}  ref: ${GITHUB_REF}"
-            uname -a
-            docker version --format '{{.Server.Version}}' 2>&1 || true
-            free -h 2>/dev/null || true
-          } > "build-env-${GITHUB_RUN_ID}.txt"
-          git add -f "build-log-${GITHUB_RUN_ID}.txt" "compat-log-${GITHUB_RUN_ID}.txt" "build-env-${GITHUB_RUN_ID}.txt" || true
-          git commit -m "CI 失败日志 run ${GITHUB_RUN_ID}" || true
-          git push -f origin "$branch"
+            echo "workspace: $PWD"
+            uname -a || true
+            docker version 2>&1 | head -20 || true
+            echo "--- /tmp 下的日志 ---"
+            ls -l /tmp/build.log /tmp/compat.log 2>&1 || true
+            echo "--- dist 目录 ---"
+            ls -la dist 2>&1 | head -20 || true
+          } > ci-diag/env.txt 2>&1
+          cp /tmp/build.log ci-diag/build.log 2>/dev/null || echo "(没有 /tmp/build.log：失败发生在 docker 构建之前)" > ci-diag/build.log
+          cp /tmp/compat.log ci-diag/compat.log 2>/dev/null || echo "(没有 /tmp/compat.log)" > ci-diag/compat.log
+          git add -f ci-diag || true
+          git commit -m "CI 失败诊断 run ${GITHUB_RUN_ID}" || true
+          git push -f origin "$branch" || true
