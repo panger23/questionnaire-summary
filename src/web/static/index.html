@@ -381,7 +381,7 @@ function renderStats() {
 function renderSummary() {
   const branches = DATA.summary;
   const maxN = Math.max(...branches.map(b => b.scores.length));
-  let html = '<table><thead><tr><th>序号</th>';
+  let html = '<table><thead><tr><th>项目名称</th>';
   branches.forEach(b => html += `<th>${esc(b.branch)}</th>`);
   html += '</tr></thead><tbody>';
   html += '<tr><td><b>组员数量</b></td>' + branches.map(b => `<td><b>${b.count}</b></td>`).join('') + '</tr>';

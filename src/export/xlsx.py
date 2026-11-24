@@ -117,7 +117,7 @@ def build_workbook(results: list[PageResult], pdf_path: str, out_path: str | Pat
     # ---------------- 汇总 ----------------
     sm = wb.add_worksheet("汇总")
     max_n = max((len(items) for _, items in branches), default=0)
-    sm.write(0, 0, "序号", bold_head_fmt)
+    sm.write(0, 0, "项目名称", bold_head_fmt)
     sm.write(1, 0, "组员数量", bold_head_fmt)
     sm.write(2, 0, "代职人", bold_head_fmt)
 

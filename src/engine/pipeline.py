@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import difflib
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Callable
 
 import numpy as np
@@ -315,6 +315,8 @@ def process_pdf(pdf_path: str, dpi: int = 300, progress: Progress | None = None,
                 f"{failures}/{total_calls} 次 LLM 调用失败（多为超时/限流），"
                 f"这些行按代码通道结果处理并标黄")
 
+    _unify_project_names(results)
+
     if not results:
         raise NotQuestionnaireError(
             f"{total_pages} 页里一张问卷都没识别出来，已停止处理。"
@@ -345,6 +347,33 @@ def _same_project(a: str, b: str) -> bool:
     if min(len(a), len(b)) < 10 or abs(len(a) - len(b)) > 2:
         return False
     return difflib.SequenceMatcher(None, a, b).ratio() >= 0.93
+
+
+def _unify_project_names(results: list[PageResult]) -> None:
+    """同一份文件里，各页 OCR 出来的项目名可能详略不一（有的漏了年份/掉字）。
+
+    明细和汇总必须一致，而且要用"最完整"的那份：
+    把相似的项目名归成一组，取组里最长的那条写回每一页。
+    """
+    groups: list[str] = []
+    for r in results:
+        name = r.header.project or ""
+        merged = False
+        for index, existing in enumerate(groups):
+            if _same_project(existing, name):
+                if len(name) > len(existing):
+                    groups[index] = name
+                merged = True
+                break
+        if not merged:
+            groups.append(name)
+
+    for r in results:
+        name = r.header.project or ""
+        for existing in groups:
+            if _same_project(existing, name) and len(existing) > len(name):
+                r.header = replace(r.header, project=existing)
+                break
 
 
 def group_by_branch(results: list[PageResult]) -> list[tuple[str, list[PageResult]]]:

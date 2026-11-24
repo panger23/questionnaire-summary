@@ -151,8 +151,14 @@ def _strip_label(text: str, label: str) -> str:
 NAME_RE = re.compile(r"^[\u4e00-\u9fa5·]{2,6}$")
 
 
+PROJECT_HINTS = ("审计", "分行", "项目", "监测", "调研", "专项", "业务")
+
+
 def _looks_project(text: str) -> bool:
-    return bool(re.search(r"\d{4}\s*年", text)) and ("审计" in text or "分行" in text)
+    """像不像一个项目名。不强制要求带年份——有的项目名本身就不带（如"总行公司条线审计监测"）。"""
+    if len(text or "") < 6:
+        return False
+    return any(hint in text for hint in PROJECT_HINTS)
 
 
 def _looks_name(text: str) -> bool:
