@@ -11,4 +11,4 @@ _PROCESS_STARTED = _dt.now()
 
 def build_stamp() -> str:
     """给界面/启动窗口显示的一句话：当前进程是哪个版本、什么时候启动的。"""
-    return f"v{__version__} · 服务启动于 {_PROCESS_STARTED:%m-%d %H:%M}"
+    return f"v{__version__} · 服务启动于 {_PROCESS_STARTED:%Y-%m-%d %H:%M}"
