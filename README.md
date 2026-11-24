@@ -134,3 +134,24 @@ pyinstaller --clean --noconfirm packaging/app.spec
 - 用户说明在 `packaging/使用说明.txt`
 - Windows 版由 GitHub Actions 在云端构建：见 `.github/workflows/build-windows.yml`
   （推送 `v*` 标签或手动触发，产物在 Actions 页面的 Artifacts 里下载）
+
+### 信创 Linux（银河麒麟 V10 / arm64，飞腾 D2000）
+
+目标机实测配置：银河麒麟桌面操作系统 V10 (SP1) 2203、内核 5.4.18、CPU 飞腾 D2000/8（arm64）、
+glibc 2.31（Debian 11 底座）。**必须在 arm64 Linux 上构建**——PyInstaller 不支持交叉编译，
+Mac 上出的包不能直接在麒麟上跑。
+
+用 GitHub 的 arm64 runner 云端构建：
+
+```bash
+git tag linux-v1.1.3
+git push origin linux-v1.1.3   # 自动构建 + 挂到 Release，免登录下载 zip
+```
+
+- 流水线：`.github/workflows/build-linux-arm64.yml`（也可在 Actions 页面手动触发）
+- 构建脚本：`packaging/build-linux-arm64.sh`，在 `manylinux_2_28` 容器里跑 →
+  给成品留下 glibc 2.28 的下限，麒麟的 2.31 才跑得起来
+- 打包完会在**干净的 Debian 11**（和麒麟同底座）里真启动一次服务并请求首页，
+  避免出现「只有构建机能跑」的假成品
+- Web 端用 `opencv-python-headless`，省掉 libGL / X11 依赖（内网机器不一定装）
+- 产物：`LuShen-linux-aarch64.zip`，解压后 `bash start.sh`

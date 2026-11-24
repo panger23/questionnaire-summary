@@ -1,0 +1,96 @@
+name: 构建信创 Linux arm64 免安装包
+
+# 目标机器：银河麒麟桌面 V10 SP1（2203）/ arm64 / 飞腾 D2000，glibc 2.31
+# 构建机器：GitHub 的 arm64 runner（原生 aarch64，不用 QEMU 模拟）
+# 构建容器：manylinux_2_28（glibc 2.28 打底，所以能在麒麟的 2.31 上跑）
+#
+# 触发方式：
+#   1. 打 linux-v* 标签（会自动把 zip 挂到 Release，免登录直接下载）
+#   2. 在 Actions 页面手动点运行（产物在 Artifacts 里）
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ["linux-v*"]
+
+permissions:
+  contents: write   # 发布 Release 需要
+
+concurrency:
+  group: linux-arm64-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build-linux-arm64:
+    name: 银河麒麟 / arm64 免安装包
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 确认构建机是 aarch64
+        run: |
+          uname -m
+          test "$(uname -m)" = "aarch64"
+
+      - name: 在 manylinux_2_28 容器里构建（依赖 + PyInstaller + 冒烟测试 + 打 zip）
+        run: |
+          docker run --rm \
+            -v "$GITHUB_WORKSPACE":/src \
+            -w /src \
+            quay.io/pypa/manylinux_2_28_aarch64:latest \
+            bash packaging/build-linux-arm64.sh
+
+      - name: 兼容性复验（干净的 Debian 11 = 麒麟 V10 的底座，glibc 2.31）
+        # 只在自己机器上能跑不算数：这里故意换一个和麒麟同底座、
+        # 但没有构建环境残留依赖的干净系统，从零启动一次。
+        run: |
+          docker run --rm -v "$GITHUB_WORKSPACE/dist:/dist:ro" debian:bullseye-slim bash -lc '
+            set -u
+            apt-get update -qq >/dev/null 2>&1
+            apt-get install -y -qq curl >/dev/null 2>&1
+            echo "试跑环境：$(uname -m) / $(cat /etc/debian_version) / glibc $(ldd --version | head -1 | awk "{print \$NF}")"
+            /dist/LuShen/LuShen --no-browser --port 8800 >/tmp/app.log 2>&1 &
+            for i in $(seq 1 90); do
+              code=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:8800/ || true)
+              if [ "$code" = "200" ]; then
+                echo "干净环境启动成功：首页返回 200"
+                exit 0
+              fi
+              sleep 1
+            done
+            echo "::error::在干净 Debian 11 里没能启动"
+            cat /tmp/app.log
+            exit 1
+          '
+
+      - name: 上传产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: LuShen-linux-aarch64
+          path: dist/LuShen-linux-aarch64.zip
+          retention-days: 60
+
+      - name: 发布到 Release（免登录直接下载）
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          tag="${{ github.ref_name }}"
+          cat > /tmp/notes.md <<'EOF'
+          ## 鲁小审 · 汇卷 —— 信创 Linux / arm64 免安装版
+
+          适配 **银河麒麟桌面操作系统 V10 / V10 SP1（2203）**、**arm64（飞腾 D2000 等）**。
+          解压后进目录执行 `bash start.sh` 即可使用。
+
+          - 完全离线可用，不需要安装 Python / Java，不需要联网
+          - 服务只监听 `127.0.0.1`，同内网其他人访问不到
+          - 构建于 manylinux_2_28（glibc 2.28 打底，麒麟 V10 是 2.31），
+            并在干净的 Debian 11 环境里做过启动验证
+          - 使用说明见压缩包内 `README.txt`
+
+          遇到「权限不够」就执行 `chmod +x LuShen start.sh`。
+          EOF
+          gh release create "$tag" dist/LuShen-linux-aarch64.zip \
+            --title "鲁小审 · 汇卷 $tag（信创 Linux arm64）" \
+            --notes-file /tmp/notes.md \
+            || gh release upload "$tag" dist/LuShen-linux-aarch64.zip --clobber
