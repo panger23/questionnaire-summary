@@ -21,6 +21,7 @@ from pydantic import BaseModel
 
 from .. import __version__
 from ..engine.pipeline import Flag, average, group_by_branch, sum_scores
+from ..engine.render import deskew
 from ..export.xlsx import build_workbook
 from ..llm.client import VisionClient
 from ..llm.config import (

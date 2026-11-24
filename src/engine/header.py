@@ -49,7 +49,8 @@ def header_crop(gray: np.ndarray, grid) -> np.ndarray:
     """表格第一行（项目名称那一行）的裁图。"""
     y0, y1 = grid.row_band(0)
     x0, x1 = grid.v[0], grid.v[-1]
-    pad = 4
+    # 项目名可能是两三行、最后一行会贴到行线上，上下多留一点，别把字裁掉
+    pad = max(8, int(0.10 * (y1 - y0)))
     h, w = gray.shape
     return gray[max(0, y0 - pad):min(h, y1 + pad), max(0, x0 - pad):min(w, x1 + pad)]
 
@@ -101,8 +102,9 @@ def _cell_bounds(crop: np.ndarray) -> list[tuple[int, int]]:
     if height < 20:
         return []
     columns = mask.sum(axis=0)
-    # 表头竖线贯穿这一条的高度，用 0.55 倍高度即可和文字区分
-    lines = _merge_runs(np.where(columns > 0.55 * height)[0])
+    # 表头竖线几乎贯穿整条高度；文字笔画最多占七成，
+    # 阈值定低了会把"三行项目名"的笔画误当成格子线，把一格切成两半（实测踩过）
+    lines = _merge_runs(np.where(columns > 0.80 * height)[0])
     if len(lines) < 4:  # 没有足够的内部分隔线，切了也没意义
         return []
     edges = [0, *lines, width]
@@ -187,17 +189,49 @@ def _ocr_selected_cells(crop: np.ndarray, bounds: list[tuple[int, int]],
             for bucket in found]
 
 
-def _parse_from_cells(cells: list[str]) -> Header:
-    project = lead = assistant = ""
+LABELS = ("项目名称", "审计组长", "组长助手", "备注")
+
+
+def _label_positions(cells: list[str]) -> list[tuple[int, str]]:
+    """找出标签格的位置（按出现顺序）。"""
+    found: list[tuple[int, str]] = []
     for index, text in enumerate(cells):
-        nxt = cells[index + 1] if index + 1 < len(cells) else ""
-        if "项目名称" in text:
-            project = _strip_label(text, "项目名称") or nxt
-        if "审计组长" in text:
-            lead = _strip_label(text, "审计组长") or nxt
-        if "组长助手" in text:
-            assistant = _strip_label(text, "组长助手") or nxt
-    return Header(project=project.strip(), lead=lead.strip(), assistant=assistant.strip())
+        for label in LABELS:
+            if label in text:
+                found.append((index, label))
+                break
+    return found
+
+
+def _value_span(cells: list[str]) -> dict[str, tuple[int, int]]:
+    """每个标签的"值"占据哪几个单元格。
+
+    一格可能被扫描件里的杂线切成两格（OCR 各读一半，拼起来是乱的），
+    所以这里不取"下一个格"，而是取"从标签格后面，到下一个标签格之前"的所有格。
+    """
+    labels = _label_positions(cells)
+    spans: dict[str, tuple[int, int]] = {}
+    for order, (index, label) in enumerate(labels):
+        end = labels[order + 1][0] if order + 1 < len(labels) else len(cells)
+        if end > index + 1:
+            spans[label] = (index + 1, end)
+    return spans
+
+
+def _parse_from_cells(cells: list[str]) -> Header:
+    spans = _value_span(cells)
+
+    def joined(label: str) -> str:
+        span = spans.get(label)
+        if span is None:
+            return ""
+        return "".join(cells[span[0]:span[1]])
+
+    project = joined("项目名称")
+    lead = joined("审计组长")
+    assistant = joined("组长助手")
+    return Header(project=project.strip(), lead=lead.strip(),
+                  assistant=assistant.strip())
 
 
 def _parse_by_labels(items: list[dict]) -> Header:
@@ -299,7 +333,26 @@ def parse_header(crop: np.ndarray) -> Header:
     if bounds:
         cell_texts = [_ocr_cell_text(crop[:, left:right]) for left, right in bounds]
         by_cells = _parse_from_cells(cell_texts)
-        if by_cells.project and by_cells.assistant:
+
+        # 项目名可能因为格子被切碎、或 OCR 只读到一部分而残缺：
+        # 把"项目名称"那一块整体重新 OCR 一次；还不行就整行 OCR 兜底。
+        if by_cells.assistant and not _looks_project(by_cells.project):
+            spans = _value_span(cell_texts)
+            span = spans.get("项目名称")
+            if span:
+                left = bounds[span[0]][0]
+                right = bounds[span[1] - 1][1]
+                retry = _ocr_cell_text(crop[:, left:right])
+                if _looks_project(retry):
+                    by_cells = Header(project=retry, lead=by_cells.lead,
+                                      assistant=by_cells.assistant)
+        if by_cells.assistant and not _looks_project(by_cells.project):
+            widest = max((it["text"] for it in items
+                          if _looks_project(it["text"])), key=len, default="")
+            if widest:
+                by_cells = Header(project=widest, lead=by_cells.lead,
+                                  assistant=by_cells.assistant)
+        if by_cells.assistant and by_cells.project:
             return by_cells
 
     # 兜底：整行 OCR + 标签相邻关系

@@ -358,7 +358,7 @@ def group_by_branch(results: list[PageResult]) -> list[tuple[str, list[PageResul
     display: dict[str, str] = {}
 
     for r in results:
-        name = r.header.project or "未识别分行"
+        name = r.header.project or "未识别项目名称"
         key = _branch_key(name)
         matched = None
         for existing in order:

@@ -16,7 +16,7 @@ import xlsxwriter
 from ..engine.pipeline import PageResult, average, group_by_branch
 
 DETAIL_COLUMNS = (
-    "序号", "页码", "分行", "审计组长", "组长助手",
+    "序号", "页码", "项目名称", "审计组长", "组长助手",
     "任务分工", "沟通协调", "团结协作", "专业技术", "关爱扶持",
     "合计", "LLM合计", "LLM标记数", "双通道一致", "标记",
 )

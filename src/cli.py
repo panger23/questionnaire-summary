@@ -110,7 +110,7 @@ def main(argv: list[str] | None = None) -> int:
     blank = f"，跳过 {len(outcome.blank_pages)} 张空白页（第 " + \
             "、".join(str(p) for p in outcome.blank_pages) + " 页）" if outcome.blank_pages else ""
     print(f"共 {len(results)} 份问卷{blank}，用时 {elapsed:.1f}s")
-    print(f"{'分行':<28}{'份数':>5}{'代职人':>10}{'平均分':>12}")
+    print(f"{'项目名称':<28}{'份数':>5}{'代职人':>10}{'平均分':>12}")
     print("-" * 58)
     for name, items in group_by_branch(results):
         print(f"{name:<28}{len(items):>5}{items[0].header.assistant:>10}"
