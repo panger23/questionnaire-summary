@@ -15,7 +15,7 @@ from pathlib import Path
 
 import uvicorn
 
-from .. import build_stamp
+from .. import __version__
 from .app import app
 
 HOST = "127.0.0.1"  # 只绑本机，内网里别人访问不到
@@ -82,7 +82,7 @@ def main(argv: list[str] | None = None) -> None:
     _say(
         "",
         "  鲁小审 · 汇卷（扫描件智能汇总）",
-        f"  {build_stamp()}   端口 {port}",
+        f"  v{__version__}   端口 {port}",
         "  ─────────────────────",
         f"  已启动：{url}",
         "  浏览器没自动打开的话，把上面这行复制到 Chrome 里",
